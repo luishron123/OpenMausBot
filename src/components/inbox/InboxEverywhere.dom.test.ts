@@ -107,6 +107,16 @@ describe("the Inbox row", () => {
     expect(inboxButton()!.getAttribute("aria-label")).toBe("Inbox, 2 waiting");
   });
 
+  it("counts a question once when the team reports it and its conversation waits too, with no line in the inbox", async () => {
+    setInboxView(placeView([]));
+    setTeamPeople({ people: [], me: null, admin: true, needsYou: [{ kind: "question", id: "own", at: AT, botId: "eli", threadId: "eli-pricing", text: "Which format?" }] });
+    await mount(row({ attention: [{ ...asked, task: { ...asked.task, unread: true } }] }));
+    expect(document.querySelector("[data-inbox-count]")?.textContent).toBe("1");
+    expect(inboxButton()!.getAttribute("aria-label")).toBe("Inbox, 1 waiting");
+    await click("[data-inbox-disclose]");
+    expect([...document.querySelectorAll("[data-inbox-waiting-row]")].map((line) => line.textContent)).toEqual(["Pricing workEli · Waits on you"]);
+  });
+
   it("lists those conversations under the row, each opening where it is, and leaves out the ones only at work", async () => {
     const onJump = vi.fn();
     await mount(row({ attention: [asked, unreadReply, atWork], onJump }));
