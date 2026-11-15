@@ -20,6 +20,7 @@ import type { InboxRow, InboxView } from "../../../shared/inbox";
 import { SidebarActiveThreads } from "../SidebarActiveThreads";
 import { NeedsYouButton } from "../TeamOwner";
 import { SidebarInboxRow } from "../SidebarInboxRow";
+import type { AttentionThread } from "../SidebarBotActivity";
 import { setAttentionPinned } from "./attention-pinned";
 import { InboxPanel } from "./InboxPanel";
 import { senderLabel, waitingCount } from "./inbox-view";
@@ -44,6 +45,11 @@ const news: InboxRow = {
 const roomNews: InboxRow = { ...news, id: "line-r", origin: { botId: "noa", threadId: "room-thread", groupId: "room", title: "Launch room", messageId: "line-r" } };
 const read: InboxRow = { ...news, id: "line-read", unread: false };
 const settled: InboxRow = { ...news, id: "line-done", tab: "done", unread: false };
+const thread = (botId: string, botName: string, threadId: string, title: string, over: Partial<AttentionThread["task"]>): AttentionThread =>
+  ({ kind: "bot", botId, botName, task: { threadId, title, createdAt: 1, queued: false, ...over } });
+const asked = thread("eli", "Eli", "eli-pricing", "Pricing work", { activity: "waiting-on-you" });
+const unreadReply = thread("noa", "Noa", "noa-report", "Weekly report", { unread: true });
+const atWork = thread("eli", "Eli", "eli-build", "Build", { busy: true });
 const placeView = (rows: InboxRow[]): InboxView => ({ botId: null, threadId: null, rows, anchor: null });
 
 let root: Root;
@@ -54,7 +60,7 @@ const mount = (child: ReactElement, bots: Bot[] = []) => act(async () => {
     { value: { state: { ...initialState, bots } as AppState, dispatch, flushBotPatches: vi.fn(), refreshInstances: vi.fn(), refreshModels: vi.fn() } as never }, child));
 });
 const click = (selector: string) => act(async () => { document.querySelector<HTMLElement>(selector)!.click(); });
-const row = (props: Partial<Parameters<typeof SidebarInboxRow>[0]> = {}) => createElement(SidebarInboxRow, { icons: false, large: false, running: false, ...props });
+const row = (props: Partial<Parameters<typeof SidebarInboxRow>[0]> = {}) => createElement(SidebarInboxRow, { icons: false, large: false, running: false, attention: [], onJump: vi.fn(), ...props });
 const inboxButton = () => document.querySelector<HTMLElement>("[data-sidebar-inbox]");
 
 beforeEach(() => {
@@ -92,6 +98,38 @@ describe("the Inbox row", () => {
     await mount(row());
     expect(inboxButton()!.getAttribute("aria-label")).toBe("Inbox");
     expect(document.querySelector("[data-inbox-count]")).toBeNull();
+  });
+
+  it("counts a conversation that waits on the person once, whether or not the inbox lists it", async () => {
+    setInboxView(placeView([approval]));
+    await mount(row({ attention: [asked, unreadReply, atWork] }));
+    expect(document.querySelector("[data-inbox-count]")?.textContent).toBe("2");
+    expect(inboxButton()!.getAttribute("aria-label")).toBe("Inbox, 2 waiting");
+  });
+
+  it("lists those conversations under the row, each opening where it is, and leaves out the ones only at work", async () => {
+    const onJump = vi.fn();
+    await mount(row({ attention: [asked, unreadReply, atWork], onJump }));
+    const disclose = document.querySelector<HTMLElement>("[data-inbox-disclose]")!;
+    expect(disclose.getAttribute("aria-expanded")).toBe("false");
+    expect(disclose.getAttribute("aria-label")).toBe("Expand Inbox");
+    expect(document.getElementById(disclose.getAttribute("aria-controls")!)!.hidden).toBe(true);
+    expect(document.querySelector("[data-inbox-waiting-row]")).toBeNull();
+    await click("[data-inbox-disclose]");
+    expect(disclose.getAttribute("aria-expanded")).toBe("true");
+    expect(currentInboxPanel().open).toBe(false);
+    expect([...document.querySelectorAll("[data-inbox-waiting-row]")].map((line) => line.textContent)).toEqual(["Pricing workEli · Waits on you", "Weekly reportNoa · Unread"]);
+    await click('[data-inbox-waiting-row="noa-report"]');
+    expect(onJump).toHaveBeenCalledWith(unreadReply);
+    await click("[data-inbox-disclose]");
+    expect(document.querySelector("[data-inbox-waiting-row]")).toBeNull();
+  });
+
+  it("offers nothing to open while no conversation waits on the person", async () => {
+    setInboxView(placeView([news]));
+    await mount(row({ attention: [atWork] }));
+    expect(document.querySelector("[data-inbox-disclose]")).toBeNull();
+    expect(document.querySelector("[data-inbox-count]")?.textContent).toBe("1");
   });
 
   it("opens and closes the inbox, and shows a dot while a bot is at work", async () => {

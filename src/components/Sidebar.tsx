@@ -1317,7 +1317,7 @@ export const Sidebar = memo(function Sidebar({ open, onClose, collapseToIcons = 
           />
         </div>
       </div>}
-      {!q && <TeamSideSwitch compact={density === "icons"} listOnly={phone} />}{!q && <SidebarInboxRow icons={density === "icons"} large={!advanced} running={attentionHasRunningWork(attention)} onOpened={phone ? onClose : undefined} />}
+      {!q && <TeamSideSwitch compact={density === "icons"} listOnly={phone} />}{!q && <SidebarInboxRow icons={density === "icons"} large={!advanced} running={attentionHasRunningWork(attention)} attention={attention} onJump={(entry) => dispatch(attentionJumpAction(entry))} onOpened={phone ? onClose : undefined} />}
       {universalPins && pinnedBots.length > 0 && !simpleDesk && (
         <div
           data-sidebar-universal-pins=""
