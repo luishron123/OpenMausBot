@@ -4,6 +4,7 @@
 import { BellDot, ChevronDown, ChevronRight, CircleAlert, Inbox } from "lucide-react";
 import { useId, useState } from "react";
 import type { InboxView } from "../../shared/inbox";
+import type { NeedsYouItem } from "../../shared/today";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { closeInbox, openInbox, useInboxPanel, useInboxSupport, useInboxView } from "@/state/inbox";
@@ -16,9 +17,12 @@ import { attentionOwnerName, type AttentionThread } from "./SidebarBotActivity";
 export const waitingOnPerson = (attention: readonly AttentionThread[]): AttentionThread[] =>
   attention.filter((entry) => entry.task.activity === "waiting-on-you" || entry.task.unread === true);
 
-/** Those of them no line of the inbox already counts. */
-export function uncountedWaiting(waiting: readonly AttentionThread[], view: InboxView | null): number {
-  const counted = new Set((view?.rows ?? []).filter((row) => row.tab === "needs-you" || (row.tab === "info" && row.unread)).map((row) => row.origin?.threadId));
+/** Those of them neither a line of the inbox nor something to fix already counts. */
+export function uncountedWaiting(waiting: readonly AttentionThread[], view: InboxView | null, fixes: readonly NeedsYouItem[] = []): number {
+  const counted = new Set([
+    ...(view?.rows ?? []).filter((row) => row.tab === "needs-you" || (row.tab === "info" && row.unread)).map((row) => row.origin?.threadId),
+    ...fixes.map((item) => item.threadId),
+  ]);
   return waiting.filter((entry) => !counted.has(entry.task.threadId)).length;
 }
 
@@ -39,7 +43,8 @@ export function SidebarInboxRow({ icons, large, running, attention, onJump, onOp
   const listId = useId();
   if (support === "no") return null;
   const waiting = waitingOnPerson(attention);
-  const count = waitingCount(view) + inboxFixes(team?.needsYou, view).length + uncountedWaiting(waiting, view);
+  const fixes = inboxFixes(team?.needsYou, view);
+  const count = waitingCount(view) + fixes.length + uncountedWaiting(waiting, view, fixes);
   const shown = count > 9 ? "9+" : String(count);
   const label = count > 0 ? t("inbox.row.count", { count }) : t("inbox.panel.title");
   const toggle = () => {
