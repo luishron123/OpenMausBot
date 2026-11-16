@@ -64,7 +64,8 @@ export function SidebarBotThreadsPeek({ bot, onScreen = false, dispatch }: { bot
   const timer = useRef<number | undefined>(undefined);
   const focusSheet = useRef(false);
   const focusAnchor = useRef(false);
-  const [deleting, setDeleting] = useState<Task | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deleting = deletingId ? bot.tasks?.find((task) => task.threadId === deletingId) : undefined;
   const labels = useId();
   const has = others > 0;
   const open = place !== null;
@@ -120,8 +121,8 @@ export function SidebarBotThreadsPeek({ bot, onScreen = false, dispatch }: { bot
   });
 
   const actions = threadRowActions(bot.id, dispatch, false);
-  const confirm = <ConfirmDialog open={deleting !== null} title={t("task.deleteConfirm")} body={t("task.deleteBody", { title: deleting?.title ?? "" })} confirmLabel={t("task.deleteAria")}
-    onCancel={() => setDeleting(null)} onConfirm={() => { if (deleting && !isWorking(deleting)) actions.onDelete(deleting); setDeleting(null); }} returnFocusRef={anchor} />;
+  const confirm = <ConfirmDialog open={deleting !== undefined} title={t("task.deleteConfirm")} body={t("task.deleteBody", { title: deleting?.title ?? "" })} confirmLabel={t("task.deleteAria")}
+    onCancel={() => setDeletingId(null)} onConfirm={() => { if (deleting && !isWorking(deleting)) actions.onDelete(deleting); setDeletingId(null); }} returnFocusRef={anchor} />;
   const slot = cn(SLOT, open && "pointer-events-auto opacity-100");
   if (!has) {
     return <><button ref={anchor} type="button" data-bot-new-thread={bot.id} aria-label={t("task.newShort")} title={t("task.newShort")}
@@ -197,7 +198,7 @@ export function SidebarBotThreadsPeek({ bot, onScreen = false, dispatch }: { bot
                   <button type="button" role="menuitem" data-peek-action="archive" id={`${titleId}a`} aria-label={t("task.archive")} aria-labelledby={`${titleId}a ${titleId}`} title={t("task.archive")}
                     disabled={working} className={ROW_ACTION} onClick={(event) => archive(task, event)}><Archive size={14} aria-hidden="true" /></button>
                   <button type="button" role="menuitem" data-peek-action="delete" id={`${titleId}d`} aria-label={t("task.deleteAria")} aria-labelledby={`${titleId}d ${titleId}`} title={t("task.deleteAria")}
-                    disabled={working} className={cn(ROW_ACTION, "hover:text-danger focus-visible:text-danger")} onClick={() => { close(); setDeleting(task); }}><Trash2 size={14} aria-hidden="true" /></button>
+                    disabled={working} className={cn(ROW_ACTION, "hover:text-danger focus-visible:text-danger")} onClick={() => { close(); setDeletingId(task.threadId); }}><Trash2 size={14} aria-hidden="true" /></button>
                 </span>}
               </div>
             );
