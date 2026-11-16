@@ -70,6 +70,11 @@ describe("a bot's page as a compact card", () => {
     expect(card().querySelector("[data-page-footer]")!.className).toContain("border-t");
   });
 
+  it("sits flat on the page, with no shadow", async () => {
+    await render(row(payload()));
+    expect(card().firstElementChild!.className).not.toContain("shadow");
+  });
+
   it("names the version once the page has been updated", async () => {
     await render(row(payload({ rev: 1, doc: "d1", history: ["d0"] })));
     expect(card().querySelector("[data-page-footer]")!.textContent).toBe("PricingPage · v2");
