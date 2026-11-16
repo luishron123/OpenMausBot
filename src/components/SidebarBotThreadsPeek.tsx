@@ -1,5 +1,5 @@
 import { Archive, Check, ChevronRight, Plus, Star, Trash2 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -98,6 +98,13 @@ export function SidebarBotThreadsPeek({ bot, onScreen = false, dispatch }: { bot
     row.addEventListener("pointerleave", leave);
     return () => { row.removeEventListener("pointerenter", enter); row.removeEventListener("pointerleave", leave); };
   }, [has, threads.length]);
+  // Rows are taller on a touch screen, so the sheet's own height decides how far up it has to sit.
+  useLayoutEffect(() => {
+    const height = sheet.current?.offsetHeight;
+    if (!place || !height) return;
+    const top = Math.max(EDGE, Math.min(place.top, window.innerHeight - height - EDGE));
+    if (top !== place.top) setPlace({ ...place, top });
+  }, [place, threads.length]);
   useEffect(() => {
     if (!open) return;
     if (focusSheet.current) { focusSheet.current = false; sheet.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus(); }

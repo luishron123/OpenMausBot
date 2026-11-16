@@ -144,6 +144,15 @@ describe("the hover sheet of a bot's other conversations", () => {
     expect(dispatch.mock.calls).toEqual([[{ type: "deleteTask", botId: "atlas", threadId: "a" }]]);
   });
 
+  it("stays inside the window when its rows are taller than a mouse's, as on a touch screen", async () => {
+    await mount([task("a"), task("b"), task("c")]);
+    row.getBoundingClientRect = () => ({ left: 8, right: 300, top: window.innerHeight - 20 }) as DOMRect;
+    const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(185);
+    await open();
+    height.mockRestore();
+    expect(sheet()!.style.top).toBe(`${window.innerHeight - 185 - 8}px`);
+  });
+
   it("offers neither action for a conversation that is working", async () => {
     await mount([task("a", { busy: true })]);
     await open();
