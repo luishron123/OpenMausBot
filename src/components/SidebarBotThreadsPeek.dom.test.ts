@@ -15,15 +15,18 @@ let chat: HTMLElement;
 let root: Root;
 const dispatch = vi.fn<(action: Action) => void>();
 
+const show = async (tasks: Task[], shown: { threadId?: string; onScreen?: boolean } = {}) => {
+  await act(async () => {
+    root.render(createElement("div", { "data-row": "" },
+      createElement(SidebarBotThreadsPeek, { bot: { id: "atlas", name: "Atlas", threadId: shown.threadId ?? "main", mainThreadId: "main", tasks: [task("main"), ...tasks] }, onScreen: shown.onScreen, dispatch })));
+  });
+};
 const mount = async (tasks: Task[], shown: { threadId?: string; onScreen?: boolean } = {}) => {
   scroller = document.createElement("div");
   chat = document.createElement("div");
   document.body.append(scroller, chat);
   root = createRoot(scroller);
-  await act(async () => {
-    root.render(createElement("div", { "data-row": "" },
-      createElement(SidebarBotThreadsPeek, { bot: { id: "atlas", name: "Atlas", threadId: shown.threadId ?? "main", mainThreadId: "main", tasks: [task("main"), ...tasks] }, onScreen: shown.onScreen, dispatch })));
-  });
+  await show(tasks, shown);
   row = scroller.querySelector<HTMLElement>("[data-row]")!;
 };
 const chevron = () => row.querySelector<HTMLButtonElement>("[data-bot-threads-peek]")!;
@@ -142,6 +145,26 @@ describe("the hover sheet of a bot's other conversations", () => {
     expect(dialog.textContent).toContain("“a” and its conversation will be deleted.");
     await act(async () => { [...dialog.querySelectorAll("button")].find((button) => button.textContent === "Delete thread")!.click(); });
     expect(dispatch.mock.calls).toEqual([[{ type: "deleteTask", botId: "atlas", threadId: "a" }]]);
+  });
+
+  it("does not delete a conversation that started working while the confirmation was open", async () => {
+    await mount([task("a")]);
+    await open();
+    await act(async () => { action("a", "delete").click(); });
+    await show([task("a", { busy: true })]);
+    const dialog = document.querySelector<HTMLElement>("[role=alertdialog], [role=dialog]")!;
+    await act(async () => { [...dialog.querySelectorAll("button")].find((button) => button.textContent === "Delete thread")!.click(); });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("closes the confirmation without deleting when the conversation is gone, also for the one on screen", async () => {
+    await mount([task("a"), task("b")], { threadId: "a", onScreen: true });
+    await open();
+    await act(async () => { action("a", "delete").click(); });
+    expect(document.querySelector("[role=alertdialog], [role=dialog]")).not.toBeNull();
+    await show([task("b")], { threadId: "b", onScreen: true });
+    expect(document.querySelector("[role=alertdialog], [role=dialog]")).toBeNull();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("stays inside the window when its rows are taller than a mouse's, as on a touch screen", async () => {
