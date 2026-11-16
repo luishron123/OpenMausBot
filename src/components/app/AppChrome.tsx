@@ -70,14 +70,10 @@ export function AppHeader({
   );
 }
 
-/** Over the foot of a page preview: the page blurs and fades into the card, so the footer reads as part of it. */
-export const PAGE_GLAZE = "pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-composer to-transparent backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black)]";
-
-export function PageCardFooter({ title, detail, updated, glazed = false, infoId, infoOpen, onInfo, onReload, reloading = false }: {
+export function PageCardFooter({ title, detail, updated, infoId, infoOpen, onInfo, onReload, reloading = false }: {
   title: string;
   detail: string;
   updated: boolean;
-  glazed?: boolean;
   infoId: string;
   infoOpen: boolean;
   onInfo(): void;
@@ -85,7 +81,7 @@ export function PageCardFooter({ title, detail, updated, glazed = false, infoId,
   reloading?: boolean;
 }) {
   return (
-    <div data-page-footer className={cn("flex items-center gap-3 px-4 py-3", !glazed && "border-t border-ink/[0.08]")}>
+    <div data-page-footer className="flex items-center gap-3 border-t border-ink/[0.08] px-4 py-3">
       <AppWindow aria-hidden="true" size={16} className="shrink-0 text-ink-tertiary" />
       <div className="min-w-0 flex-1">
         <div title={title} className="truncate text-[13px] font-medium leading-[18px] text-ink"><bdi dir="auto">{title}</bdi></div>
