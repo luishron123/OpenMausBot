@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { CursorAvatar } from "./CursorAvatar";
+import { FACE_BOX } from "./cursor-face-data";
+import { MOTION, VIEW_SPAN, bodyTransform } from "./mascot-motion";
 import { DEFAULT_FINISH, finishGradient } from "./mascot-finish";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { MASCOT_BODIES, MASCOT_BODY_IDS } from "../../shared/mascot-bodies";
@@ -19,6 +21,49 @@ const render = (props: Props) => renderToStaticMarkup(createElement(CursorAvatar
 const svg = (props: Props) => render({ finish: "glass", ...props });
 
 const mascot = (props: Props) => render({ finish: "mascot", gradient: finishGradient(MAUS_COLORS.blue, "mascot"), ...props });
+
+const VIEW_MARGIN = (VIEW_SPAN - FACE_BOX) / 2;
+
+type Point = [number, number];
+
+function outlinePoints(clip: string): Point[] {
+  const numbers = (/ d="([^"]+)"/.exec(clip)![1].match(/-?[\d.]+/g) ?? []).map(Number);
+  const points: Point[] = [];
+  let from: Point = [numbers[0], numbers[1]];
+  for (let i = 2; i + 5 < numbers.length; i += 6) {
+    const [x1, y1, x2, y2, x, y] = numbers.slice(i, i + 6);
+    for (let step = 1; step <= 24; step++) {
+      const t = step / 24, u = 1 - t;
+      points.push([
+        u * u * u * from[0] + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x,
+        u * u * u * from[1] + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y,
+      ]);
+    }
+    from = [x, y];
+  }
+  return points;
+}
+
+function applyTransform(transform: string, point: Point): Point {
+  let [x, y] = point;
+  for (const [, name, args] of [...transform.matchAll(/(translate|rotate|scale)\(([^)]*)\)/g)].reverse()) {
+    const [a, b = name === "scale" ? a : 0, c = 0] = args.split(/[\s,]+/).map(Number);
+    if (name === "translate") [x, y] = [x + a, y + b];
+    if (name === "scale") [x, y] = [x * a, y * b];
+    if (name === "rotate") {
+      const cos = Math.cos((a * Math.PI) / 180), sin = Math.sin((a * Math.PI) / 180);
+      [x, y] = [b + (x - b) * cos - (y - c) * sin, c + (x - b) * sin + (y - c) * cos];
+    }
+  }
+  return [x, y];
+}
+
+function strokeReachPastOutline(markup: string, fit: string): number {
+  const unclipped = markup.replace(/<g clip-path="[^"]+"[^>]*>(?:<use [^>]*><\/use>)+<\/g>/g, "");
+  const scale = Number(/scale\(([\d.]+)\)/.exec(fit)?.[1] ?? 1);
+  const widths = [...unclipped.matchAll(/<use [^>]*stroke-width="([\d.]+)"/g)].map((m) => Number(m[1]) * scale);
+  return Math.max(0, ...widths) / 2;
+}
 
 describe("the default finish", () => {
   it("is the bold mascot", () => {
@@ -109,13 +154,38 @@ describe("the glass finish", () => {
     }
   });
 
-  it("keeps the outer halo inside the margin around the body", () => {
-    for (const id of MASCOT_BODY_IDS) {
-      const markup = svg({ size: 96, silhouette: MASCOT_BODIES[id] });
-      const scale = Number(/scale\(([\d.]+)\)/.exec(MASCOT_BODIES[id].fit)![1]);
-      const widths = [...markup.matchAll(/<use href="#[^"]+-shape"[^>]*stroke-width="([\d.]+)"><\/use>/g)].map((m) => Number(m[1]) * scale);
-      expect(Math.max(...widths) / 2).toBeLessThan(15);
+  it("paints no stroke past the outline, so no body motion can push the finish out of the viewBox", () => {
+    for (const finish of ["glass", "mascot"] as const) {
+      for (const id of MASCOT_BODY_IDS) {
+        const body = MASCOT_BODIES[id];
+        expect(strokeReachPastOutline(render({ finish, size: 96, silhouette: body }), body.fit), `${finish} ${id}`).toBe(0);
+      }
     }
+  });
+
+  it.each(["bouncing", "celebrate"] as const)("adds nothing outside the viewBox to what the body itself reaches through the whole %s motion", (state) => {
+    for (const id of MASCOT_BODY_IDS) {
+      const body = MASCOT_BODIES[id];
+      const reach = strokeReachPastOutline(svg({ size: 96, silhouette: body }), body.fit);
+      const outline = outlinePoints(body.clip).map((point) => applyTransform(body.fit, point));
+      let min = Infinity, max = -Infinity;
+      for (let elapsed = 0; elapsed <= 2000; elapsed += 10) {
+        const transform = bodyTransform(MOTION[state], elapsed, 1);
+        for (const point of outline) {
+          const [x, y] = applyTransform(transform, point);
+          min = Math.min(min, x, y);
+          max = Math.max(max, x, y);
+        }
+      }
+      expect(min, id).toBeLessThan(-5);
+      expect(min - reach, id).toBeGreaterThanOrEqual(Math.min(min, -VIEW_MARGIN));
+      expect(max + reach, id).toBeLessThanOrEqual(Math.max(max, FACE_BOX + VIEW_MARGIN));
+    }
+  });
+
+  it("measures a stroke drawn outside the body's clip as reaching past the outline", () => {
+    const halo = '<g fill="none"><use href="#a-shape" transform="translate(4 4) scale(0.5)" stroke-width="42"></use></g>';
+    expect(strokeReachPastOutline(halo, "translate(4 4) scale(0.5)")).toBe(10.5);
   });
 
   it("keeps the rim the same width on screen whatever the body's fit scale", () => {

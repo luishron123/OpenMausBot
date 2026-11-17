@@ -17,7 +17,6 @@ export interface FinishInput {
 
 export interface FinishPaint {
   defs: ReactNode;
-  underBody: ReactNode;
   overBody: ReactNode;
   faceInk: string;
   eye: SVGProps<SVGPathElement>;
@@ -64,8 +63,6 @@ const GLASS = {
   lightHueShift: 10,
   rimUnits: 5,
   glowUnits: 13,
-  haloUnits: [7, 14, 21],
-  haloOpacity: 0.09,
 };
 
 function glassGradient(fill: string): MascotGradient {
@@ -88,7 +85,7 @@ function glassPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsPi
       <stop offset="100%" stopColor={gradient[2]} />
     </linearGradient>
   );
-  if (bodyIsPicture) return { defs: bodyGradient, underBody: null, overBody: null, faceInk, eye: {} };
+  if (bodyIsPicture) return { defs: bodyGradient, overBody: null, faceInk, eye: {} };
   const detail = detailAt(sizePx);
   const detailed = detail > 0;
   const fit = silhouette.fit || undefined;
@@ -118,11 +115,6 @@ function glassPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsPi
         )}
         <g id={`${uid}-shape`} dangerouslySetInnerHTML={{ __html: silhouette.clip }} />
       </>
-    ),
-    underBody: detailed && (
-      <g opacity={detail} fill="none" stroke={gradient[1]} strokeOpacity={GLASS.haloOpacity} strokeLinejoin="round">
-        {GLASS.haloUnits.map((width) => <use key={width} href={shape} transform={fit} strokeWidth={width * units} />)}
-      </g>
     ),
     overBody: (
       <>
@@ -178,7 +170,7 @@ function mascotPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsP
       <stop offset="0%" stopColor={fill} />
     </linearGradient>
   );
-  if (bodyIsPicture) return { defs: flatFill, underBody: null, overBody: null, faceInk: chosenFaceInk ?? WHITE, eye: {} };
+  if (bodyIsPicture) return { defs: flatFill, overBody: null, faceInk: chosenFaceInk ?? WHITE, eye: {} };
   const detail = detailAt(sizePx);
   const sparkles = detail > 0 && isHex(faceInk) && faceInk.toLowerCase() !== WHITE;
   const fit = silhouette.fit || undefined;
@@ -201,7 +193,6 @@ function mascotPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsP
         <g id={`${uid}-shape`} dangerouslySetInnerHTML={{ __html: silhouette.clip }} />
       </>
     ),
-    underBody: null,
     overBody: (
       <>
         <use href={`#${uid}-shape`} transform={fit} fill={`url(#${uid}-belly)`} />
