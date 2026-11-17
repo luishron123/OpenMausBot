@@ -12,18 +12,16 @@ export interface FinishInput {
   silhouette: { fit: string; clip: string };
   sizePx: number;
   eyeColor: string;
+  bodyIsPicture: boolean;
 }
 
 export interface FinishPaint {
-  /** Must define the gradient `${uid}-grad`: the body and the state glyphs are filled with it. */
   defs: ReactNode;
-  /** Drawn over the filled body and under the face. */
-  over: ReactNode;
+  overBody: ReactNode;
   eye?: SVGProps<SVGPathElement>;
 }
 
 interface FinishStyle {
-  /** The body's three stops, light to deep, from a bot colour. */
   gradient: (fill: string) => MascotGradient;
   paint: (input: FinishInput) => FinishPaint;
 }
@@ -62,8 +60,8 @@ const GLASS = {
   hueShift: 16,
   lightHue: 60,
   deepHue: 255,
-  /** Below this the rim, the core glow and the eye halo are finer than a pixel and only blur the mark. */
-  detailFromPx: 24,
+  detailFadesInFromPx: 20,
+  detailFullAtPx: 28,
   rimUnits: 5,
 };
 
@@ -79,18 +77,23 @@ function glassGradient(fill: string): MascotGradient {
 
 const fitScale = (fit: string) => Number(/scale\(([\d.]+)/.exec(fit)?.[1] ?? 1) || 1;
 
-function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor }: FinishInput): FinishPaint {
-  const detailed = sizePx >= GLASS.detailFromPx;
+function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor, bodyIsPicture }: FinishInput): FinishPaint {
+  const bodyGradient = (
+    <linearGradient id={`${uid}-grad`} x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0%" stopColor={gradient[0]} />
+      <stop offset="48%" stopColor={gradient[1]} />
+      <stop offset="100%" stopColor={gradient[2]} />
+    </linearGradient>
+  );
+  if (bodyIsPicture) return { defs: bodyGradient, overBody: null };
+  const detail = clamp01((sizePx - GLASS.detailFadesInFromPx) / (GLASS.detailFullAtPx - GLASS.detailFadesInFromPx));
+  const detailed = detail > 0;
   const fit = silhouette.fit || undefined;
   const shape = `#${uid}-shape`;
   return {
     defs: (
       <>
-        <linearGradient id={`${uid}-grad`} x1="0.1" y1="0" x2="0.9" y2="1">
-          <stop offset="0%" stopColor={gradient[0]} />
-          <stop offset="48%" stopColor={gradient[1]} />
-          <stop offset="100%" stopColor={gradient[2]} />
-        </linearGradient>
+        {bodyGradient}
         <radialGradient id={`${uid}-gloss`} cx="0.42" cy="-0.42" r="0.98">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.5" />
           <stop offset="88%" stopColor="#ffffff" stopOpacity="0.14" />
@@ -112,12 +115,12 @@ function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor }: FinishInput
         <g id={`${uid}-shape`} dangerouslySetInnerHTML={{ __html: silhouette.clip }} />
       </>
     ),
-    over: (
+    overBody: (
       <>
-        {detailed && <use href={shape} transform={fit} fill={`url(#${uid}-core)`} />}
+        {detailed && <use href={shape} transform={fit} fill={`url(#${uid}-core)`} opacity={detail} />}
         <use href={shape} transform={fit} fill={`url(#${uid}-gloss)`} />
         {detailed && (
-          <g clipPath={`url(#${uid}-clip)`}>
+          <g clipPath={`url(#${uid}-clip)`} opacity={detail}>
             <use
               href={shape}
               transform={fit}
@@ -131,7 +134,7 @@ function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor }: FinishInput
       </>
     ),
     eye: detailed && eyeColor.toLowerCase() === "#ffffff"
-      ? { stroke: eyeColor, strokeOpacity: 0.24, strokeWidth: 9, strokeLinejoin: "round" }
+      ? { stroke: eyeColor, strokeOpacity: 0.24 * detail, strokeWidth: 9, strokeLinejoin: "round" }
       : undefined,
   };
 }
