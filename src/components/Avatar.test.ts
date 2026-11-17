@@ -52,7 +52,7 @@ describe("mascot facial feature colors", () => {
     for (const mascotBody of ["cursor", "star", "pumpkin", "vampire"] as const) {
       for (const color of ["green", "chrome"] as const) {
         const markup = renderBot({ color, mascotBody, mascotFaceColor });
-        expect(markup).toContain(`fill="${ink}"`);
+        expect(markup).toMatch(new RegExp(`fill="${ink}"|offset="100%" stop-color="${ink}"`));
         expect(markup).toContain(`stroke="${ink}"`);
         expect(markup).not.toContain('visibility="hidden"');
       }
@@ -62,7 +62,7 @@ describe("mascot facial feature colors", () => {
   it("keeps default inks when an override is reset or comes from an older profile", () => {
     expect(renderBot({ color: "chrome", mascotFaceColor: null })).toContain('stroke="#1E2833"');
     expect(renderBot({ mascotBody: "ghost" })).toContain('stroke="#0d0a10"');
-    expect(renderBot({})).toContain('stroke="#ffffff"');
+    expect(renderBot({})).toContain('stroke="#17171c"');
   });
 
   it("does not paint features over an uploaded image", () => {

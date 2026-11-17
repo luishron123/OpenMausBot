@@ -19,7 +19,7 @@ import { useFestivalDress, wornBody } from "@/lib/festival-dress";
 import { t } from "@/lib/i18n";
 import { CarvedAvatar } from "./CarvedAvatar";
 import { steelBodyImage } from "@/lib/steel-body";
-import { finishGradient } from "./mascot-finish";
+import { finishGradient, type MascotFinish } from "./mascot-finish";
 
 export const EYE_SCALE = 1.12;
 export const MOUTH_WEIGHT = 11;
@@ -48,9 +48,9 @@ const MOTION_FACE: MotionFaces = {
 
 const MOTION_FACE_MS = 1400;
 
-const gradientFor = (color: MausColor): [string, string, string] => {
+const gradientFor = (color: MausColor, finish?: MascotFinish): [string, string, string] => {
   if (color === "chrome") return CHROME_GRADIENT;
-  return finishGradient(MAUS_COLORS[color] ?? MAUS_COLORS.green);
+  return finishGradient(MAUS_COLORS[color] ?? MAUS_COLORS.green, finish);
 };
 
 export function roomAvatarGradient(color: MausColor): [string, string, string] {
@@ -85,6 +85,7 @@ export type MausAvatarProps = {
   bodyId?: BotBodyId;
   gradient?: [string, string, string];
   faceColor?: MascotFaceColor | null;
+  finish?: MascotFinish;
   /** Whose face this is; a decorative mascot has none. */
   kind?: AvatarKind;
 };
@@ -135,6 +136,7 @@ function GradientAvatarComponent(
     bodyId,
     gradient,
     faceColor,
+    finish,
     kind,
   }: MausAvatarProps,
   ref: React.Ref<MausAvatarHandle>,
@@ -187,7 +189,8 @@ function GradientAvatarComponent(
         expression={expression}
         size={size}
         silhouette={silhouette}
-        gradient={gradient ?? gradientFor(color)}
+        gradient={gradient ?? gradientFor(color, finish)}
+        finish={finish}
         picture={chrome && !faceInk ? steelBodyImage(silhouette.id, size, globalThis.devicePixelRatio ?? 1) : null}
         eyeColor={faceInk ?? (chrome ? CHROME_EYES : undefined)}
         title={label ?? null}

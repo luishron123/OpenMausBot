@@ -1,24 +1,26 @@
 import type { ReactNode, SVGProps } from "react";
 
-export type MascotFinish = "glass";
+export type MascotFinish = "mascot" | "glass";
 
-export const DEFAULT_FINISH: MascotFinish = "glass";
+export const DEFAULT_FINISH: MascotFinish = "mascot";
 
 export type MascotGradient = [string, string, string];
 
 export interface FinishInput {
   uid: string;
   gradient: MascotGradient;
-  silhouette: { fit: string; clip: string };
+  silhouette: { fit: string; clip: string; anchor: { x: number; y: number } };
   sizePx: number;
-  eyeColor: string;
+  chosenFaceInk: string | undefined;
   bodyIsPicture: boolean;
 }
 
 export interface FinishPaint {
   defs: ReactNode;
+  underBody: ReactNode;
   overBody: ReactNode;
-  eye?: SVGProps<SVGPathElement>;
+  faceInk: string;
+  eye: SVGProps<SVGPathElement>;
 }
 
 interface FinishStyle {
@@ -49,19 +51,23 @@ function toHex([h, s, l]: Hsl): string {
   return `#${channel(120)}${channel(0)}${channel(-120)}`;
 }
 
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+const DETAIL = { fadesInFromPx: 20, fullAtPx: 28 };
+
+const detailAt = (sizePx: number) => clamp01((sizePx - DETAIL.fadesInFromPx) / (DETAIL.fullAtPx - DETAIL.fadesInFromPx));
+
+const WHITE = "#ffffff";
+
 function hueToward(hue: number, target: number, degrees: number): number {
   const delta = ((target - hue + 540) % 360) - 180;
   return hue + Math.sign(delta) * Math.min(Math.abs(delta), degrees);
 }
 
-const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
-
 const GLASS = {
   hueShift: 16,
   lightHue: 60,
   deepHue: 255,
-  detailFadesInFromPx: 20,
-  detailFullAtPx: 28,
   rimUnits: 5,
 };
 
@@ -77,7 +83,8 @@ function glassGradient(fill: string): MascotGradient {
 
 const fitScale = (fit: string) => Number(/scale\(([\d.]+)/.exec(fit)?.[1] ?? 1) || 1;
 
-function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor, bodyIsPicture }: FinishInput): FinishPaint {
+function glassPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsPicture }: FinishInput): FinishPaint {
+  const faceInk = chosenFaceInk ?? WHITE;
   const bodyGradient = (
     <linearGradient id={`${uid}-grad`} x1="0.1" y1="0" x2="0.9" y2="1">
       <stop offset="0%" stopColor={gradient[0]} />
@@ -85,8 +92,8 @@ function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor, bodyIsPicture
       <stop offset="100%" stopColor={gradient[2]} />
     </linearGradient>
   );
-  if (bodyIsPicture) return { defs: bodyGradient, overBody: null };
-  const detail = clamp01((sizePx - GLASS.detailFadesInFromPx) / (GLASS.detailFullAtPx - GLASS.detailFadesInFromPx));
+  if (bodyIsPicture) return { defs: bodyGradient, underBody: null, overBody: null, faceInk, eye: {} };
+  const detail = detailAt(sizePx);
   const detailed = detail > 0;
   const fit = silhouette.fit || undefined;
   const shape = `#${uid}-shape`;
@@ -115,6 +122,7 @@ function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor, bodyIsPicture
         <g id={`${uid}-shape`} dangerouslySetInnerHTML={{ __html: silhouette.clip }} />
       </>
     ),
+    underBody: null,
     overBody: (
       <>
         {detailed && <use href={shape} transform={fit} fill={`url(#${uid}-core)`} opacity={detail} />}
@@ -133,13 +141,89 @@ function glassPaint({ uid, gradient, silhouette, sizePx, eyeColor, bodyIsPicture
         )}
       </>
     ),
-    eye: detailed && eyeColor.toLowerCase() === "#ffffff"
-      ? { stroke: eyeColor, strokeOpacity: 0.24 * detail, strokeWidth: 9, strokeLinejoin: "round" }
-      : undefined,
+    faceInk,
+    eye: detailed && faceInk.toLowerCase() === WHITE
+      ? { stroke: faceInk, strokeOpacity: 0.24 * detail, strokeWidth: 9, strokeLinejoin: "round" }
+      : {},
+  };
+}
+
+const MASCOT = {
+  ink: "#17171c",
+  shadeLightness: 0.74,
+  tintTowardWhite: 0.42,
+  inkNeedsLumaAbove: 0.3,
+  highlight: { dx: -30, dy: -50, rx: 25, ry: 10.5, tilt: -38, opacity: 0.7 },
+};
+
+function mascotGradient(fill: string): MascotGradient {
+  const [h, s, l] = toHsl(fill);
+  return [toHex([h, s, l + (1 - l) * MASCOT.tintTowardWhite]), fill, toHex([h, s, l * MASCOT.shadeLightness])];
+}
+
+const isHex = (color: string) => /^#[0-9a-f]{6}$/i.test(color);
+
+function luma(hex: string): number {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+}
+
+function mix(from: string, to: string, amount: number): string {
+  const a = Number.parseInt(from.slice(1), 16), b = Number.parseInt(to.slice(1), 16);
+  const channel = (shift: number) => Math.round(((a >> shift) & 255) + ((((b >> shift) & 255) - ((a >> shift) & 255)) * amount));
+  return `#${[16, 8, 0].map((shift) => channel(shift).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function mascotPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsPicture }: FinishInput): FinishPaint {
+  const [tint, fill, shade] = gradient;
+  const bodyCarriesInk = isHex(fill) && luma(fill) > MASCOT.inkNeedsLumaAbove;
+  const faceInk = chosenFaceInk ?? (bodyCarriesInk ? MASCOT.ink : WHITE);
+  const flatFill = (
+    <linearGradient id={`${uid}-grad`}>
+      <stop offset="0%" stopColor={fill} />
+    </linearGradient>
+  );
+  if (bodyIsPicture) return { defs: flatFill, underBody: null, overBody: null, faceInk: chosenFaceInk ?? WHITE, eye: {} };
+  const detail = detailAt(sizePx);
+  const sparkles = detail > 0 && isHex(faceInk) && faceInk.toLowerCase() !== WHITE;
+  const fit = silhouette.fit || undefined;
+  const { dx, dy, rx, ry, tilt, opacity } = MASCOT.highlight;
+  const x = silhouette.anchor.x + dx, y = silhouette.anchor.y + dy;
+  return {
+    defs: (
+      <>
+        {flatFill}
+        <radialGradient id={`${uid}-belly`} cx="0.5" cy="-1.3" r="2.115">
+          <stop offset="99.4%" stopColor={shade} stopOpacity="0" />
+          <stop offset="100%" stopColor={shade} />
+        </radialGradient>
+        {sparkles && (
+          <radialGradient id={`${uid}-eye`} cx="0.7" cy="0.27" r="0.2">
+            <stop offset="78%" stopColor={mix(faceInk, WHITE, detail)} />
+            <stop offset="100%" stopColor={faceInk} />
+          </radialGradient>
+        )}
+        <g id={`${uid}-shape`} dangerouslySetInnerHTML={{ __html: silhouette.clip }} />
+      </>
+    ),
+    underBody: null,
+    overBody: (
+      <>
+        <use href={`#${uid}-shape`} transform={fit} fill={`url(#${uid}-belly)`} />
+        {detail > 0 && (
+          <g clipPath={`url(#${uid}-clip)`} opacity={detail * opacity}>
+            <ellipse cx={x} cy={y} rx={rx} ry={ry} fill={tint} transform={`rotate(${tilt} ${x} ${y})`} />
+          </g>
+        )}
+      </>
+    ),
+    faceInk,
+    eye: sparkles ? { fill: `url(#${uid}-eye)` } : {},
   };
 }
 
 const FINISHES: Record<MascotFinish, FinishStyle> = {
+  mascot: { gradient: mascotGradient, paint: mascotPaint },
   glass: { gradient: glassGradient, paint: glassPaint },
 };
 
