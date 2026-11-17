@@ -40,7 +40,6 @@ export function LabelAction({ children, onClick, ...rest }: { children: ReactNod
   );
 }
 
-/** `flat` draws the rows straight on the panel, as the Details tab does: no surface, no dividers. */
 export function Card({ label, action, anchor, flat = false, children }: { label?: ReactNode; action?: ReactNode; anchor?: string; flat?: boolean; children: ReactNode }) {
   const advanced = useAdvancedMode();
   return (

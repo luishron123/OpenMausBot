@@ -17,7 +17,6 @@ const EDGE = 8;
 const GAP = 6;
 /** A request older than this was for a header that never came on screen. */
 const REQUEST_MS = 5000;
-/** What the arrow keys walk, in the order the list shows them. */
 const STOPS = "[data-conversations-query], [data-conversations-new], [data-sidebar-thread-row], [data-conversations-more], [data-conversations-archived]";
 /** A conversation row's own menu and its delete confirmation are drawn outside the list, and belong to it. */
 const OWN_OVERLAYS = "[data-thread-overlay], [role=alertdialog]";
@@ -45,7 +44,6 @@ export function threadsPlace(pill: Pick<DOMRect, "left" | "width" | "bottom">, v
   return { left: Math.max(EDGE, Math.min(left, viewport.width - width - EDGE)), top: pill.bottom + GAP, width };
 }
 
-/** The chevron at the end of the chat header's bot pill, and the list of the bot's conversations it opens. */
 export function ChatHeadThreads({ bot, className }: { bot: Bot; className?: string }) {
   const [place, setPlace] = useState<Place | null>(null);
   const motion = useHeldMenuMotion(place);

@@ -29,8 +29,6 @@ function privacyLabelOf(privacy: ChatHeadPrivacy): string | null {
   }
 }
 
-/** The pill's two halves on one floating surface: the bot's face and name, which open its panel, and the chevron that
- * lists its conversations. */
 export function ChatHeadPillShell({ bot, children }: { bot: Bot; children: ReactNode }) {
   return (
     <div data-chathead-pill-shell className={cn("flex min-w-0 max-w-full items-stretch rounded-full text-ink", ELEVATED_FLOAT)}>

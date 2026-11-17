@@ -10,7 +10,6 @@ import { Card, NavRow } from "./rows";
 import { panelMemoryNotes } from "./memory-notes";
 import { useMemoryDoc } from "./use-memory-doc";
 
-/** What the bot keeps between conversations: its memory, its skills and the folder it works in. */
 export function KeepsCard({ bot, flat, onOpen }: { bot: Bot; flat?: boolean; onOpen: (page: SimplePageId) => void }) {
   const { capabilities } = useDesktopCapabilities();
   const skills = useManagedSkills(bot);

@@ -54,8 +54,6 @@ export function forgetConversationLines(): void {
   asked.clear();
 }
 
-/** `popover` is the chat header's list: no heading, the search always at hand, and every conversation listed even when
- * there is one; `onPick` tells it a conversation was chosen or started. */
 export function BotConversations({ bot, popover = false, onPick }: { bot: Bot; popover?: boolean; onPick?: () => void }) {
   const { state, dispatch } = useStore();
   const now = useRelativeNow();
