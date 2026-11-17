@@ -32,7 +32,7 @@ describe("the glass finish", () => {
   it("draws the rim inside the body's own clip on every body, so the outline does not grow", () => {
     for (const id of MASCOT_BODY_IDS) {
       const markup = svg({ size: 44, silhouette: MASCOT_BODIES[id] });
-      expect(markup).toMatch(/<g clip-path="url\(#[^)]+-clip\)"><use href="#[^"]+-shape"[^>]*fill="none" stroke="url\(#[^)]+-rim\)"/);
+      expect(markup).toMatch(/<g clip-path="url\(#[^)]+-clip\)" opacity="1"><use href="#[^"]+-shape"[^>]*fill="none" stroke="url\(#[^)]+-rim\)"/);
       expect(markup.split(MASCOT_BODIES[id].clip).length - 1).toBe(2);
     }
   });
@@ -47,7 +47,12 @@ describe("the glass finish", () => {
     const small = svg({ size: 20 });
     expect(small).toMatch(/fill="url\(#[^)]+-gloss\)"/);
     expect(small).not.toMatch(/-rim|-core|stroke-opacity/);
-    expect(svg({ size: 24 })).toMatch(/-rim/);
+  });
+
+  it("fades the fine details in between 20 and 28 px instead of switching them on", () => {
+    const rimOpacity = (size: number) => Number(/<g clip-path="[^"]+" opacity="([\d.]+)"><use/.exec(svg({ size }))![1]);
+    expect([21, 24, 27, 28, 96].map(rimOpacity)).toEqual([0.125, 0.5, 0.875, 1, 1]);
+    expect(svg({ size: 24 })).toContain('stroke-opacity="0.12"');
   });
 
   it("halos white eyes only", () => {
@@ -56,6 +61,8 @@ describe("the glass finish", () => {
   });
 
   it("paints nothing over a picture body", () => {
-    expect(svg({ size: 96, picture: "/steel/cursor-128.webp" })).not.toMatch(/<use /);
+    const steel = svg({ size: 96, picture: "/steel/cursor-128.webp" });
+    expect(steel).not.toMatch(/<use |-gloss|-core|-rim|-shape/);
+    expect(steel).toContain("-grad");
   });
 });
