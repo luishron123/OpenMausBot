@@ -59,25 +59,21 @@ const detailAt = (sizePx: number) => clamp01((sizePx - DETAIL.fadesInFromPx) / (
 
 const WHITE = "#ffffff";
 
-function hueToward(hue: number, target: number, degrees: number): number {
-  const delta = ((target - hue + 540) % 360) - 180;
-  return hue + Math.sign(delta) * Math.min(Math.abs(delta), degrees);
-}
-
 const GLASS = {
-  hueShift: 16,
-  lightHue: 60,
-  deepHue: 255,
+  secondHueShift: -34,
+  lightHueShift: 10,
   rimUnits: 5,
+  glowUnits: 13,
+  haloUnits: [7, 14, 21],
+  haloOpacity: 0.09,
 };
 
 function glassGradient(fill: string): MascotGradient {
   const [h, s, l] = toHsl(fill);
-  const vivid = clamp01(s * 1.12);
   return [
-    toHex([hueToward(h, GLASS.lightHue, GLASS.hueShift), clamp01(s * 1.2), l + (1 - l) * 0.3]),
-    toHex([h, vivid, l]),
-    toHex([hueToward(h, GLASS.deepHue, GLASS.hueShift), vivid, l * 0.7]),
+    toHex([h + GLASS.lightHueShift, clamp01(s * 1.2), l + (1 - l) * 0.34]),
+    toHex([h, clamp01(s * 1.12), l]),
+    toHex([h + GLASS.secondHueShift, clamp01(s * 1.12), l * 0.86]),
   ];
 }
 
@@ -88,7 +84,7 @@ function glassPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsPi
   const bodyGradient = (
     <linearGradient id={`${uid}-grad`} x1="0.1" y1="0" x2="0.9" y2="1">
       <stop offset="0%" stopColor={gradient[0]} />
-      <stop offset="48%" stopColor={gradient[1]} />
+      <stop offset="45%" stopColor={gradient[1]} />
       <stop offset="100%" stopColor={gradient[2]} />
     </linearGradient>
   );
@@ -97,14 +93,15 @@ function glassPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsPi
   const detailed = detail > 0;
   const fit = silhouette.fit || undefined;
   const shape = `#${uid}-shape`;
+  const units = 1 / fitScale(silhouette.fit);
   return {
     defs: (
       <>
         {bodyGradient}
-        <radialGradient id={`${uid}-gloss`} cx="0.42" cy="-0.42" r="0.98">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.5" />
-          <stop offset="88%" stopColor="#ffffff" stopOpacity="0.14" />
-          <stop offset="89%" stopColor="#ffffff" stopOpacity="0" />
+        <radialGradient id={`${uid}-gloss`} cx="0.4" cy="-0.3" r="1.05">
+          <stop offset="0%" stopColor={WHITE} stopOpacity="0.55" />
+          <stop offset="62%" stopColor={WHITE} stopOpacity="0.2" />
+          <stop offset="100%" stopColor={WHITE} stopOpacity="0" />
         </radialGradient>
         {detailed && (
           <>
@@ -113,37 +110,35 @@ function glassPaint({ uid, gradient, silhouette, sizePx, chosenFaceInk, bodyIsPi
               <stop offset="100%" stopColor={gradient[0]} stopOpacity="0" />
             </radialGradient>
             <linearGradient id={`${uid}-rim`} x1="0.15" y1="0" x2="0.85" y2="1">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.62" />
-              <stop offset="55%" stopColor="#ffffff" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="#ffffff" stopOpacity="0.3" />
+              <stop offset="0%" stopColor={WHITE} stopOpacity="0.7" />
+              <stop offset="55%" stopColor={WHITE} stopOpacity="0.16" />
+              <stop offset="100%" stopColor={WHITE} stopOpacity="0.4" />
             </linearGradient>
           </>
         )}
         <g id={`${uid}-shape`} dangerouslySetInnerHTML={{ __html: silhouette.clip }} />
       </>
     ),
-    underBody: null,
+    underBody: detailed && (
+      <g opacity={detail} fill="none" stroke={gradient[1]} strokeOpacity={GLASS.haloOpacity} strokeLinejoin="round">
+        {GLASS.haloUnits.map((width) => <use key={width} href={shape} transform={fit} strokeWidth={width * units} />)}
+      </g>
+    ),
     overBody: (
       <>
         {detailed && <use href={shape} transform={fit} fill={`url(#${uid}-core)`} opacity={detail} />}
         <use href={shape} transform={fit} fill={`url(#${uid}-gloss)`} />
         {detailed && (
-          <g clipPath={`url(#${uid}-clip)`} opacity={detail}>
-            <use
-              href={shape}
-              transform={fit}
-              fill="none"
-              stroke={`url(#${uid}-rim)`}
-              strokeWidth={(GLASS.rimUnits * 2) / fitScale(silhouette.fit)}
-              strokeLinejoin="round"
-            />
+          <g clipPath={`url(#${uid}-clip)`} opacity={detail} fill="none" stroke={`url(#${uid}-rim)`} strokeLinejoin="round">
+            <use href={shape} transform={fit} strokeWidth={GLASS.glowUnits * 2 * units} strokeOpacity="0.35" />
+            <use href={shape} transform={fit} strokeWidth={GLASS.rimUnits * 2 * units} />
           </g>
         )}
       </>
     ),
     faceInk,
     eye: detailed && faceInk.toLowerCase() === WHITE
-      ? { stroke: faceInk, strokeOpacity: 0.24 * detail, strokeWidth: 9, strokeLinejoin: "round" }
+      ? { stroke: faceInk, strokeOpacity: 0.3 * detail, strokeWidth: 11, strokeLinejoin: "round" }
       : {},
   };
 }
