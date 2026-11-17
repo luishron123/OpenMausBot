@@ -20,6 +20,15 @@ const renderBot = (bot: Partial<BotAvatarProps["bot"]>) =>
     createElement(BotAvatar, { bot: { color: "green", ...bot }, animated: false }),
   );
 
+function paintedFills(markup: string): string[] {
+  return [...markup.matchAll(/ fill="([^"]+)"/g)].map(([, fill]) => {
+    const id = /^url\(#(.+)\)$/.exec(fill)?.[1];
+    if (!id) return fill;
+    const gradient = new RegExp(`<(linear|radial)Gradient id="${id}"[^>]*>(.*?)</\\1Gradient>`).exec(markup)?.[2] ?? "";
+    return [...gradient.matchAll(/stop-color="([^"]+)"/g)].at(-1)?.[1] ?? fill;
+  });
+}
+
 describe("MausAvatar body", () => {
   it("wears the cursor when no body is given", () => {
     expect(render({})).toContain(MASCOT_BODIES.cursor.fit);
@@ -52,7 +61,7 @@ describe("mascot facial feature colors", () => {
     for (const mascotBody of ["cursor", "star", "pumpkin", "vampire"] as const) {
       for (const color of ["green", "chrome"] as const) {
         const markup = renderBot({ color, mascotBody, mascotFaceColor });
-        expect(markup).toContain(`fill="${ink}"`);
+        expect(paintedFills(markup)).toContain(ink);
         expect(markup).toContain(`stroke="${ink}"`);
         expect(markup).not.toContain('visibility="hidden"');
       }

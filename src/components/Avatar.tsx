@@ -19,6 +19,7 @@ import { useFestivalDress, wornBody } from "@/lib/festival-dress";
 import { t } from "@/lib/i18n";
 import { CarvedAvatar } from "./CarvedAvatar";
 import { steelBodyImage } from "@/lib/steel-body";
+import { finishGradient, type MascotFinish } from "./mascot-finish";
 
 export const EYE_SCALE = 1.12;
 export const MOUTH_WEIGHT = 11;
@@ -47,23 +48,9 @@ const MOTION_FACE: MotionFaces = {
 
 const MOTION_FACE_MS = 1400;
 
-function mix(hex: string, toward: string, t: number): string {
-  const a = Number.parseInt(hex.slice(1), 16);
-  const b = Number.parseInt(toward.slice(1), 16);
-  const channel = (shift: number) => {
-    const va = (a >> shift) & 0xff;
-    const vb = (b >> shift) & 0xff;
-    return Math.round(va + (vb - va) * t);
-  };
-  return `#${[channel(16), channel(8), channel(0)]
-    .map((part) => part.toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-const gradientFor = (color: MausColor): [string, string, string] => {
+const gradientFor = (color: MausColor, finish?: MascotFinish): [string, string, string] => {
   if (color === "chrome") return CHROME_GRADIENT;
-  const fill = MAUS_COLORS[color] ?? MAUS_COLORS.green;
-  return [mix(fill, "#ffffff", 0.55), fill, mix(fill, "#000000", 0.42)];
+  return finishGradient(MAUS_COLORS[color] ?? MAUS_COLORS.green, finish);
 };
 
 export function roomAvatarGradient(color: MausColor): [string, string, string] {
@@ -98,6 +85,7 @@ export type MausAvatarProps = {
   bodyId?: BotBodyId;
   gradient?: [string, string, string];
   faceColor?: MascotFaceColor | null;
+  finish?: MascotFinish;
   /** Whose face this is; a decorative mascot has none. */
   kind?: AvatarKind;
 };
@@ -148,6 +136,7 @@ function GradientAvatarComponent(
     bodyId,
     gradient,
     faceColor,
+    finish,
     kind,
   }: MausAvatarProps,
   ref: React.Ref<MausAvatarHandle>,
@@ -200,7 +189,8 @@ function GradientAvatarComponent(
         expression={expression}
         size={size}
         silhouette={silhouette}
-        gradient={gradient ?? gradientFor(color)}
+        gradient={gradient ?? gradientFor(color, finish)}
+        finish={finish}
         picture={chrome && !faceInk ? steelBodyImage(silhouette.id, size, globalThis.devicePixelRatio ?? 1) : null}
         eyeColor={faceInk ?? (chrome ? CHROME_EYES : undefined)}
         title={label ?? null}
