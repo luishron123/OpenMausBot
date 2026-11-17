@@ -164,6 +164,20 @@ describe("the conversations list on the chat header's pill", () => {
     expect(document.activeElement).toBe(last);
   });
 
+  it.each([
+    ["the conversation on screen", () => rows()[1]!],
+    ["another conversation", () => rows()[0]!],
+    ["New conversation", () => sheet()!.querySelector<HTMLElement>("[data-conversations-new]")!],
+  ])("gives focus back to the chevron when %s is chosen from the keyboard", async (_name, choice) => {
+    await open(research(), 0);
+    const chosen = choice();
+    chosen.focus();
+    click(chosen, 0);
+    await settle();
+    expect(sheet()).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+  });
+
   it("jumps to a conversation by its first letters, but not while the person types in the search", async () => {
     await open();
     rows()[0]!.focus();

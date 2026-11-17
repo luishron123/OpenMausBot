@@ -147,7 +147,7 @@ export function ChatHeadThreads({ bot, className }: { bot: Bot; className?: stri
           className={cn(MENU_SHEET, "fixed z-[60] gap-0 overflow-y-auto", motion.className)}
           {...motion.exitProps}
         >
-          <BotConversations bot={bot} popover onPick={close} />
+          <BotConversations bot={bot} popover onPick={dismiss} />
         </div>,
         document.body,
       )}
