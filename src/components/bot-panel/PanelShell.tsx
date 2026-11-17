@@ -8,6 +8,7 @@ import { ChatShareMenu } from "@/components/ChatMoreMenu";
 import { useCaptionChrome } from "../DesktopCapabilities";
 import type { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
 import { AvatarEditorCard } from "./AvatarEditorCard";
+import { ComputerTab } from "./ComputerTab";
 import { DetailsTab } from "./DetailsTab";
 import { LibraryTab } from "./LibraryTab";
 import { PANEL_TABS, PAGES, TAB_LABEL, type PanelTab, type PanelTarget, type SimplePageId } from "./page-registry";
@@ -15,12 +16,6 @@ import { PageBody, pageSurfaceCls } from "./pages";
 import { linkTarget, usePanelLink, type PanelLink } from "./panel-link";
 import { PanelHero } from "./PanelHero";
 import { PageHeader, roundButtonCls } from "./rows";
-
-function pagePath(page: SimplePageId | undefined): SimplePageId[] {
-  if (!page) return [];
-  const under = PAGES[page].under;
-  return under ? [under, page] : [page];
-}
 
 function initialTarget(section: BotSettingsSection | null, link: PanelLink | null): PanelTarget {
   return section ? linkTarget(section, link) : { tab: "details" };
@@ -36,7 +31,8 @@ export function BotPanel({ bot, derived, linkedSection, onClose }: {
   const link = usePanelLink();
   const [tab, setTab] = useState<PanelTab>(() => initialTarget(linkedSection, link).tab);
   const [stack, setStack] = useState<SimplePageId[]>(() => {
-    return pagePath(initialTarget(linkedSection, link).page);
+    const page = initialTarget(linkedSection, link).page;
+    return page ? [page] : [];
   });
   const [anchor, setAnchor] = useState<string | null>(() => initialTarget(linkedSection, link).anchor ?? null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -48,7 +44,7 @@ export function BotPanel({ bot, derived, linkedSection, onClose }: {
   const scrollTop = () => bodyRef.current?.scrollTo({ top: 0 });
   const go = (target: PanelTarget) => {
     setTab(target.tab);
-    setStack(pagePath(target.page));
+    setStack(target.page ? [target.page] : []);
     setAnchor(target.anchor ?? null);
     setEditorOpen(false);
     setEditingInstructions(Boolean(target.editInstructions));
@@ -161,8 +157,9 @@ export function BotPanel({ bot, derived, linkedSection, onClose }: {
               </div>
             </div>
             <div role="tabpanel">
-              {tab === "details" && <DetailsTab bot={bot} derived={derived} onOpen={openPage} editingInstructions={editingInstructions} onEditInstructions={setEditingInstructions} />}
-              {tab === "library" && <LibraryTab bot={bot} />}
+              {tab === "details" && <DetailsTab bot={bot} derived={derived} onOpen={openPage} />}
+              {tab === "library" && <LibraryTab bot={bot} onOpen={openPage} />}
+              {tab === "computer" && <ComputerTab bot={bot} derived={derived} onOpen={openPage} />}
             </div>
           </>
         ) : (
@@ -175,7 +172,14 @@ export function BotPanel({ bot, derived, linkedSection, onClose }: {
               onBack={back}
             />
             <div className={cn("mt-4", pageSurfaceCls)}>
-              <PageBody page={page} bot={bot} derived={derived} onOpen={openPage} />
+              <PageBody
+                page={page}
+                bot={bot}
+                derived={derived}
+                onOpen={openPage}
+                editingInstructions={editingInstructions}
+                onEditInstructions={setEditingInstructions}
+              />
             </div>
           </div>
         )}

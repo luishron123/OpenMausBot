@@ -1,13 +1,12 @@
 import { localizedTaskTitle } from "@/lib/task-title";
 import { ChevronRight, Lock, UserRound, Users } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store"; import { useStoreSelector } from "@/state/store-select";
 import { awayFromMainThread } from "@/state/thread-navigation";
 import { BotAvatar } from "./Avatar";
-import { ChatHeadThreads } from "./ChatHeadThreads";
 import { ELEVATED_FLOAT, ELEVATED_HOVER } from "./elevated";
 import { sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { BOT_PANEL_ID } from "./bot-panel/side-panel";
@@ -15,6 +14,7 @@ import { sharedChatAudience } from "./TeamPrivateChatsLine";
 
 /** The factory title a new conversation starts with. */
 const UNTITLED = "New thread";
+const CHEVRON_MOTION = "duration-[140ms] ease-[cubic-bezier(.22,1,.36,1)]";
 
 export type ChatHeadPrivacy = { kind: "private" } | { kind: "ownHelper" } | { kind: "shared"; team: string; onlyPeopleAdded?: boolean; sharedWith?: string } | null;
 
@@ -29,19 +29,9 @@ function privacyLabelOf(privacy: ChatHeadPrivacy): string | null {
   }
 }
 
-export function ChatHeadPillShell({ bot, children }: { bot: Bot; children: ReactNode }) {
-  return (
-    <div data-chathead-pill-shell className={cn("flex min-w-0 max-w-full items-stretch rounded-full text-ink", ELEVATED_FLOAT)}>
-      {children}
-      <ChatHeadThreads bot={bot} />
-    </div>
-  );
-}
-
-/** Simple mode's whole chat header: the bot's face and name in one pill, which opens and closes the bot panel, and a
- * chevron beside them that lists the bot's conversations. Away from the bot's main conversation it also names the one
- * on screen. A dot says another of the bot's conversations needs a look; a team chat says who can read it with one
- * quiet glyph. */
+/** Simple mode's whole chat header: the bot's face and name in one pill, which opens and closes the bot panel. Away from
+ * the bot's main conversation it also names the one on screen. A dot says another of the bot's conversations needs a
+ * look; a team chat says who can read it with one quiet glyph. */
 export function ChatHeadPill({ bot, avatar, privacy, onToggle }: {
   bot: Bot;
   avatar: Pick<ComponentProps<typeof BotAvatar>, "state" | "motion" | "motionKey" | "animated">;
@@ -58,36 +48,40 @@ export function ChatHeadPill({ bot, avatar, privacy, onToggle }: {
     : !title || title === UNTITLED ? t("task.untitledChat") : localizedTaskTitle(title);
   const label = t("chat.openProfileAria", { name: bot.name });
   return (
-    <ChatHeadPillShell bot={bot}>
-      <button
-        type="button"
-        data-chathead-pill
-        data-tour="bot-pill"
-        onClick={onToggle}
-        title={t("botPanel.tab.details")}
-        aria-label={conversation ? `${label}, ${conversation}` : label}
-        aria-expanded={open}
-        aria-controls={open ? BOT_PANEL_ID : undefined}
-        className={cn("flex min-w-0 items-center gap-2 rounded-full py-[7.5px] ps-[7.5px] pe-1.5 text-ink", ELEVATED_HOVER)}
-      >
-        <BotAvatar bot={bot} size={24} {...avatar} />
-        <span dir="auto" className="min-w-0 truncate text-[14px] font-medium leading-5">{bot.name}</span>
-        {conversation && (
-          <>
-            <ChevronRight size={12} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
-            <span data-chathead-conversation dir="auto" className="min-w-0 max-w-[180px] truncate text-[14px] font-medium leading-5 text-ink-secondary">{conversation}</span>
-          </>
-        )}
-        {privacyLabel && (
-          <span data-chathead-privacy={privacy?.kind} title={privacyLabel} className="flex shrink-0 text-ink-tertiary">
-            <PrivacyIcon size={13} aria-hidden="true" />
-            <span className="sr-only">{privacyLabel}</span>
-          </span>
-        )}
-        {elsewhere > 0 && (
-          <span role="img" data-chathead-elsewhere aria-label={t("task.otherActivity", { count: elsewhere })} className="size-1.5 shrink-0 rounded-full bg-accent" />
-        )}
-      </button>
-    </ChatHeadPillShell>
+    <button
+      type="button"
+      data-chathead-pill
+      data-tour="bot-pill"
+      onClick={onToggle}
+      title={t("chat.openBotPanel")}
+      aria-label={conversation ? `${label}, ${conversation}` : label}
+      aria-expanded={open}
+      aria-controls={open ? BOT_PANEL_ID : undefined}
+      className={cn("group flex min-w-0 max-w-full items-center gap-2 rounded-full py-[7.5px] pl-[7.5px] pr-[13.5px] text-ink", ELEVATED_FLOAT, ELEVATED_HOVER)}
+    >
+      <BotAvatar bot={bot} size={24} {...avatar} />
+      <span dir="auto" className="min-w-0 truncate text-[14px] font-medium leading-5">{bot.name}</span>
+      {conversation && (
+        <>
+          <ChevronRight size={12} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
+          <span data-chathead-conversation dir="auto" className="min-w-0 max-w-[180px] truncate text-[14px] font-medium leading-5 text-ink-secondary">{conversation}</span>
+        </>
+      )}
+      {privacyLabel && (
+        <span data-chathead-privacy={privacy?.kind} title={privacyLabel} className="flex shrink-0 text-ink-tertiary">
+          <PrivacyIcon size={13} aria-hidden="true" />
+          <span className="sr-only">{privacyLabel}</span>
+        </span>
+      )}
+      {elsewhere > 0 && (
+        <span role="img" data-chathead-elsewhere aria-label={t("task.otherActivity", { count: elsewhere })} className="size-1.5 shrink-0 rounded-full bg-accent" />
+      )}
+      {!open && !conversation && (
+        // Hidden at rest and folded into the gap, so the pill stays tight; it slides in on hover or keyboard focus.
+        <span aria-hidden="true" data-chathead-chevron className={cn("-ml-2 flex w-0 shrink-0 overflow-hidden opacity-0 transition-[width,margin,opacity] group-hover:-ml-0.5 group-hover:w-3 group-hover:opacity-100 group-focus-visible:-ml-0.5 group-focus-visible:w-3 group-focus-visible:opacity-100", CHEVRON_MOTION)}>
+          <ChevronRight size={12} className="shrink-0 text-ink-tertiary" />
+        </span>
+      )}
+    </button>
   );
 }

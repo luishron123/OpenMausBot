@@ -92,7 +92,7 @@ import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMess
 import { ScreenFrame } from "./ScreenFrame";
 import { CompactionChip, DigestChip } from "./DigestChip";
 import { RenameTitle } from "./RenameTitle"; import { ChatHeadRole, chiefOfStaffBadge } from "./BotRole";
-import { BotActivityPicker } from "./TaskPicker"; import { ChatHeadPill, ChatHeadPillShell } from "./ChatHeadPill"; import { HeaderShare } from "./bot-access/HeaderShare"; import { ThreadPresenceFaces } from "./TeamPresence"; import { useStoreRef } from "@/state/store-ref"; import { sameFields, useStoreDispatch, useStoreSelector } from "@/state/store-select"; import { sameDrawnBots } from "@/lib/drawn-bots";
+import { BotActivityPicker } from "./TaskPicker"; import { ChatHeadPill } from "./ChatHeadPill"; import { HeaderShare } from "./bot-access/HeaderShare"; import { ThreadPresenceFaces } from "./TeamPresence"; import { useStoreRef } from "@/state/store-ref"; import { sameFields, useStoreDispatch, useStoreSelector } from "@/state/store-select"; import { sameDrawnBots } from "@/lib/drawn-bots";
 import { ELEVATED_FLOAT, ELEVATED_HOVER } from "./elevated";
 import { ModelPicker } from "./ModelPicker"; import { useFailedTurnFix } from "./FailedTurnFix";
 import { ChatHeaderMenu, ChatMoreMenu } from "./ChatMoreMenu"; import { TeamOwnHelperHeader, TeamPrivateFirstLine, TeamPrivateHeader, TeamSharedHeader } from "./TeamPrivateChatsLine"; import { ownChatStarted } from "@/state/team-chats";
@@ -1040,19 +1040,20 @@ export const ChatView = memo(function ChatView({ bot: profile, inForkPanel = fal
               {chiefOfStaffBadge(bot)}
             </div>
           ) : (
-            <ChatHeadPillShell bot={bot}>
-              <button
-                type="button"
-                data-chathead-pill data-tour="bot-pill"
-                onClick={() => dispatch({ type: "toggleSettings", open: true })}
-                title={t("chat.openProfile")} aria-label={t("chat.openProfileAria", { name: bot.name })}
-                className={cn("flex h-9 min-w-0 items-center gap-2.5 rounded-full py-0.5 ps-2 pe-1.5 text-ink", ELEVATED_HOVER)}
-              >
-                <BotAvatar bot={bot} state={stateForBot({ ...bot, messages })} size={24} motion={mascotMotion?.kind ?? "none"} motionKey={mascotMotion?.nonce ?? 0} animated={headerAnimated} />
-                <span className="min-w-0 truncate text-[14px] font-medium text-ink">{bot.name}</span>
-                {chiefOfStaffBadge(bot)}
-              </button>
-            </ChatHeadPillShell>
+            <button
+              type="button"
+              data-chathead-pill data-tour="bot-pill"
+              onClick={() => dispatch({ type: "toggleSettings", open: true })}
+              title={t("chat.openProfile")}
+              aria-label={t("chat.openProfileAria", { name: bot.name })}
+              className={cn("group flex h-9 min-w-0 items-center gap-2.5 rounded-full py-0.5 pl-2 pr-3.5 text-ink", ELEVATED_FLOAT, ELEVATED_HOVER)}
+            >
+              <BotAvatar bot={bot} state={stateForBot({ ...bot, messages })} size={24}
+                motion={mascotMotion?.kind ?? "none"} motionKey={mascotMotion?.nonce ?? 0} animated={headerAnimated} />
+              <span className="min-w-0 truncate text-[14px] font-medium text-ink">{bot.name}</span>
+              {chiefOfStaffBadge(bot)}
+              <ChevronRight size={14} aria-hidden="true" className="-ml-2.5 w-0 shrink-0 text-ink-secondary opacity-0 transition-[width,margin,opacity] duration-150 group-hover:ml-0 group-hover:w-3.5 group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:w-3.5 group-focus-visible:opacity-100" />
+            </button>
           )}
           {!phone && !simpleHead && <ChatHeadRole bot={bot} />}<span role="status" className="sr-only" data-chathead-status>{bot.busy ? t("sidebar.preview.working") : ""}</span>{!simpleHead && privateChat && <TeamPrivateHeader />}{!simpleHead && ownHelper && <TeamOwnHelperHeader />}{!simpleHead && sharedChat && team && <TeamSharedHeader team={team} onlyPeopleAdded={bot.onlyPeopleAdded} sharedWith={currentTask?.sharedWith?.name} />}
           {!simpleHead && !bot.busy && bot.waitingForTeammates && <span className="truncate text-[12px] text-ink-secondary" role="status">{t("chat.teammatesWorking")}</span>}

@@ -1,12 +1,13 @@
 import type { LocaleKey } from "@/locales";
 import type { BotSettingsSection } from "@/state/store";
 
-export const PANEL_TABS = ["details", "library"] as const;
+export const PANEL_TABS = ["details", "library", "computer"] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 
 export const TAB_LABEL: Record<PanelTab, LocaleKey> = {
   details: "botPanel.tab.details",
   library: "botPanel.tab.library",
+  computer: "botPanel.tab.computer",
 };
 
 export type PageId =
@@ -28,25 +29,23 @@ export function isSimplePage(page: PageId): page is SimplePageId {
 export interface PageMeta {
   title: LocaleKey;
   home: PanelTab;
-  /** The page this one is reached from, so a link straight to it still goes back there. */
-  under?: SimplePageId;
   intro?: LocaleKey;
 }
 
 export const PAGES: Record<PageId, PageMeta> = {
   settings: { title: "botPanel.page.settings", home: "details" },
-  where: { title: "computer.simple.whereWorks", home: "details", under: "settings" },
+  where: { title: "computer.simple.whereWorks", home: "computer" },
   setup: { title: "botSetup.ideas", home: "details" },
   model: { title: "model.simple.model", home: "details" },
   instructions: { title: "botSettings.simple.instructions", home: "details" },
   approvals: { title: "botPanel.page.approvals", home: "details" },
   routines: { title: "botSettings.simple.routines", home: "details" },
   apps: { title: "botPanel.appsRow", home: "details", intro: "botPanel.apps.intro" },
-  memory: { title: "botPanel.memoryRow", home: "details", intro: "botPanel.memory.intro" },
-  skills: { title: "botSettings.simple.skills", home: "details", intro: "botSettings.simple.skillsHint" },
-  browser: { title: "settings.sites.title", home: "details", under: "settings" },
-  folder: { title: "computer.files.folder", home: "details", intro: "botPanel.folder.intro" },
-  android: { title: "botPanel.page.android", home: "details" },
+  memory: { title: "botPanel.memoryRow", home: "library", intro: "botPanel.memory.intro" },
+  skills: { title: "botSettings.simple.skills", home: "library", intro: "botSettings.simple.skillsHint" },
+  browser: { title: "settings.sites.title", home: "computer" },
+  folder: { title: "computer.files.folder", home: "library", intro: "botPanel.folder.intro" },
+  android: { title: "botPanel.page.android", home: "computer" },
   voice: { title: "botPanel.page.voice", home: "details" },
   blurb: { title: "botPanel.page.blurb", home: "details" },
   team: { title: "botPanel.page.team", home: "details" },
@@ -68,7 +67,7 @@ export interface PanelTarget {
   tab: PanelTab;
   page?: SimplePageId;
   anchor?: string;
-  /** Opens the Instructions editor in place on the Details tab. */
+  /** Opens the Instructions editor in place on the Bot settings page. */
   editInstructions?: boolean;
 }
 
@@ -76,14 +75,14 @@ const SECTION_TARGET: Record<BotSettingsSection, PanelTarget> = {
   overview: { tab: "details" },
   identity: { tab: "details" },
   slack: { tab: "details" },
-  soul: { tab: "details", anchor: "instructions", editInstructions: true },
-  skills: { tab: "details", page: "skills" },
-  memory: { tab: "details", page: "memory" },
+  soul: { tab: "details", page: "settings", anchor: "instructions", editInstructions: true },
+  skills: { tab: "library", page: "skills" },
+  memory: { tab: "library", page: "memory" },
   library: { tab: "library" },
   routines: { tab: "details", page: "routines" },
-  access: { tab: "details", page: "settings", anchor: "computer" },
+  access: { tab: "computer" },
   model: { tab: "details", anchor: "model" },
-  permissions: { tab: "details", anchor: "approval" },
+  permissions: { tab: "details", page: "settings", anchor: "approval" },
   voice: { tab: "details" },
   visibility: { tab: "details" },
   history: { tab: "details" },

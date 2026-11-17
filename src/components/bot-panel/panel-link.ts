@@ -5,13 +5,13 @@ import { isSimplePage, PAGES, sectionTarget, type PageId, type PanelTarget, type
 
 /**
  * A named open of a bot's settings. The store keeps only the section, which the Simple bot panel maps to one tab or
- * page; a link may name a closer page (Access spans the Computer section and several pages), and every link is a new
+ * page; a link may name a closer page (Access spans the Computer tab and several pages), and every link is a new
  * object, so following the same one again lands there again after the panel has moved on.
  */
 export interface PanelLink {
   section: BotSettingsSection;
   page?: PageId;
-  /** A card on the section's tab to scroll to, such as "model". */
+  /** A card on the section's tab to scroll to, such as "conversations". */
   anchor?: string;
   nonce: number;
 }

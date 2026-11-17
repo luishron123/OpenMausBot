@@ -29,17 +29,8 @@ it("names it too from another conversation's list, in the person's language", ()
   expect(pill(away, { kind: "shared", team: "Acme" })).toContain("Shared chat");
 });
 
-it("puts the conversations chevron beside the name, as its own button on the same surface", () => {
-  const markup = pill(bot("main"), null);
-  const shell = markup.match(/^<div[^>]*data-chathead-pill-shell="true"[^>]*>/)![0];
-  expect(shell.match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "bg-composer"]));
-  const buttons = [...markup.matchAll(/<button[^>]*>/g)].map(([tag]) => tag);
-  expect(buttons).toHaveLength(2);
-  expect(buttons[0]).toContain('data-chathead-pill="true"');
-  expect(buttons[0]).toContain('aria-label="Open Rooms&#x27;s profile"');
-  expect(buttons[1]).toContain('data-chathead-threads="true"');
-  expect(buttons[1]).toContain('aria-haspopup="dialog"');
-  expect(buttons[1]).toContain('aria-expanded="false"');
-  expect(buttons[1]).toContain('aria-label="Conversations: Rooms"');
-  expect(markup).not.toContain("data-chathead-threads-sheet");
+it("keeps the chevron hidden until the pill is hovered or focused", () => {
+  const chevron = pill(bot("main"), null).match(/<span[^>]*data-chathead-chevron[^>]*>/)![0];
+  const classes = chevron.match(/class="([^"]*)"/)![1]!.split(" ");
+  expect(classes).toEqual(expect.arrayContaining(["w-0", "opacity-0", "group-hover:opacity-100", "group-focus-visible:opacity-100"]));
 });

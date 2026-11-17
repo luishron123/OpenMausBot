@@ -14,7 +14,7 @@ import { usePlaceViews } from "../PlaceChip";
 import { screenFramePreview } from "../ScreenFrame";
 import type { BotPatch, useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
 import type { SimplePageId } from "./page-registry";
-import { Card, CardLabel, NavRow, RadioRow } from "./rows";
+import { Card, NavRow, RadioRow } from "./rows";
 
 type Derived = ReturnType<typeof useBotSettingsDerived>;
 type PlaceChoice = "auto" | Place | "off";
@@ -126,7 +126,7 @@ export function WherePage({ bot, derived }: { bot: Bot; derived: Derived }) {
   );
 }
 
-export function ComputerSection({ bot, derived, onOpen }: { bot: Bot; derived: Derived; onOpen?: (page: SimplePageId) => void }) {
+export function ComputerTab({ bot, derived, onOpen }: { bot: Bot; derived: Derived; onOpen: (page: SimplePageId) => void }) {
   const openComputer = useOpenComputer(bot);
   const ownerOrAdmin = useOwnerOrAdmin();
   const { browserEnabled } = derived;
@@ -138,14 +138,13 @@ export function ComputerSection({ bot, derived, onOpen }: { bot: Bot; derived: D
   const screenSrc = screen ? screenFramePreview({ threadId: bot.threadId, messageId: screen.id }, screen.mime).src : null;
 
   return (
-    <section data-panel-card="computer">
-      <CardLabel>{t("botPanel.tab.computer")}</CardLabel>
+    <div data-panel-tabpanel="computer">
       <button
         type="button"
         data-panel-action="open-computer"
         aria-label={`${t("place.action.watch")}: ${screenOf}`}
         onClick={() => openComputer()}
-        className="group relative flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-xl bg-composer ring-1 ring-inset ring-ink/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
+        className="group relative mt-2.5 flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-xl bg-composer ring-1 ring-inset ring-ink/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
       >
         {screenSrc ? (
           <img src={screenSrc} alt="" className="absolute inset-0 size-full object-cover" />
@@ -177,16 +176,16 @@ export function ComputerSection({ bot, derived, onOpen }: { bot: Bot; derived: D
           title={t("computer.simple.whereWorks", { name: bot.name })}
           hint={usingNow ? t("computer.simple.usingNow", { place: usingNow }) : undefined}
           value={currentLabel}
-          onClick={() => onOpen?.("where")}
+          onClick={() => onOpen("where")}
         />
         <NavRow
           data-panel-page="browser"
           icon={KeyRound}
           title={t("settings.sites.title")}
           value={signedIn ?? undefined}
-          onClick={() => onOpen?.("browser")}
+          onClick={() => onOpen("browser")}
         />
       </Card>
-    </section>
+    </div>
   );
 }
