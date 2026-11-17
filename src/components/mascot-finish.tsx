@@ -2,7 +2,7 @@ import type { ReactNode, SVGProps } from "react";
 
 export type MascotFinish = "mascot" | "glass";
 
-export const DEFAULT_FINISH: MascotFinish = "mascot";
+export const DEFAULT_FINISH: MascotFinish = "glass";
 
 export type MascotGradient = [string, string, string];
 

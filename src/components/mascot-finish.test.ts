@@ -66,9 +66,10 @@ function strokeReachPastOutline(markup: string, fit: string): number {
 }
 
 describe("the default finish", () => {
-  it("is the bold mascot", () => {
-    expect(DEFAULT_FINISH).toBe("mascot");
-    expect(render({ size: 96 })).toContain("-belly");
+  it("is glass", () => {
+    expect(DEFAULT_FINISH).toBe("glass");
+    expect(render({ size: 96 })).toBe(svg({ size: 96 }));
+    expect(render({ size: 96 })).not.toContain("-belly");
   });
 });
 
