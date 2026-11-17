@@ -24,7 +24,7 @@ import { useMoveToMyCloud } from "./MoveToMyCloud";
 import { useMoveToTeam } from "./MoveToTeam";
 import type { MenuState } from "./Sidebar";
 import { departmentNames, moveBotsToSection, useMayMoveBots } from "./bot-sections";
-import { openBotSettings } from "./bot-panel/panel-link";
+import { showBotConversations } from "./ChatHeadThreads";
 import { isArchived } from "./SidebarThreadRow";
 
 type Flyout = "more" | "move";
@@ -283,11 +283,11 @@ export function BotContextMenu({
       ...moveToCloud.items(bot, item),
       ...deleteAll,
     ];
-    // Simple view hides the thread list: start one, see them all (the panel's Conversations), and choose the one it opens.
+    // Simple view hides the thread list: start one, see them all (the chat header's list), and choose the one it opens.
     const newThread = bot.yourAccess === "view" ? null : item(<SquarePen size={16} className="text-ink-secondary" />, t("task.newShort"), () => dispatch({ type: "newTask", botId: bot.id }));
     const viewThreads = item(<MessagesSquare size={16} className="text-ink-secondary" />, t("sidebar.bot.simple.viewThreads"), () => {
       openForSettings();
-      openBotSettings(dispatch, "history", { botId: bot.id, anchor: "conversations" });
+      showBotConversations(bot.id);
     });
     const openTask = state.selectedId === bot.id ? bot.tasks?.find((task) => task.threadId === bot.threadId) : undefined;
     const setMain = remoteClient || admin !== true || !openTask || openTask.routineRunId || openTask.private || isArchived(openTask) ? null : item(

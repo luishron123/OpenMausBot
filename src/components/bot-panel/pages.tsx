@@ -30,7 +30,7 @@ import { useChoosesVisibility, VisibilitySection } from "../bot-settings/Visibil
 import type { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
 import { RoutineList } from "../routines/RoutineList";
 import { BrowserLogins } from "./browser-logins";
-import { useOpenComputer, WherePage } from "./ComputerTab";
+import { useOpenComputer, WherePage } from "./ComputerSection";
 import { SettingsPage } from "./SettingsPage";
 import { panelMemoryNotes, withMemoryNote, withoutMemoryNote, type PanelMemoryNote } from "./memory-notes";
 import type { SimplePageId } from "./page-registry";
@@ -607,15 +607,13 @@ function VisibilityPage({ bot }: PageContext) {
   return useChoosesVisibility() ? <VisibilitySection bot={bot} /> : null;
 }
 
-export function PageBody({ page, onOpen, editingInstructions, onEditInstructions, ...context }: PageContext & {
+export function PageBody({ page, onOpen, ...context }: PageContext & {
   page: SimplePageId;
   onOpen?: (page: SimplePageId) => void;
-  editingInstructions?: boolean;
-  onEditInstructions?: (open: boolean) => void;
 }): ReactNode {
   switch (page) {
     case "settings":
-      return <SettingsPage {...context} onOpen={onOpen} editingInstructions={editingInstructions} onEditInstructions={onEditInstructions} />;
+      return <SettingsPage {...context} onOpen={onOpen} />;
     case "where":
       return <WherePage {...context} />;
     case "apps":

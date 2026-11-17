@@ -96,11 +96,11 @@ function elapsedSeconds(text: string): number {
   return -1;
 }
 
-/** A bot's conversations are listed in its panel, which the chat header's pill opens; click it only while closed. */
+/** A bot's conversations are listed from the chevron on the chat header's pill; click it only while closed. */
 async function openConversations(handle: string, name: string): Promise<void> {
   await waitUntil(async () => (await ui("eval", handle, "--js", `(() => {
-    if (document.querySelector('[data-panel-card="conversations"] [data-sidebar-thread-row]')) return true;
-    document.querySelector('[data-chathead-pill][aria-expanded="false"]')?.click();
+    if (document.querySelector('[data-chathead-threads-sheet] [data-sidebar-thread-row]')) return true;
+    document.querySelector('[data-chathead-threads][aria-expanded="false"]')?.click();
     return false;
   })()`)).result, 10_000, `${name}'s conversations to show`);
 }
@@ -151,12 +151,20 @@ describe("the thinking timer stays anchored across a thread switch", () => {
       const title = document.querySelector('.turn-presence [title]')?.getAttribute('title');
       return title?.split(' · ').find(part => /^(?:\\d+m )?\\d+s$/.test(part)) ?? null;
     })()`);
-    const selectThread = (threadId: string) => evaluate(`document.querySelector('[data-sidebar-thread-row="${threadId}"]')?.click(); true`);
-    const isCurrent = (threadId: string) => evaluate(`Boolean(document.querySelector('[data-sidebar-thread-row="${threadId}"][aria-current="page"]'))`);
+    // Picking a conversation closes the list, so each step opens it again first.
+    const selectThread = async (threadId: string) => {
+      await openConversations(info.ui, "Pepper");
+      return evaluate(`document.querySelector('[data-chathead-threads-sheet] [data-sidebar-thread-row="${threadId}"]')?.click(); true`);
+    };
+    const isCurrent = async (threadId: string) => {
+      await openConversations(info.ui, "Pepper");
+      return evaluate(`Boolean(document.querySelector('[data-chathead-threads-sheet] [data-sidebar-thread-row="${threadId}"][aria-current="page"]'))`);
+    };
+    const closeConversations = () => evaluate(`document.querySelector('[data-chathead-threads][aria-expanded="true"]')?.click(); true`);
     const taskOf = async (threadId: string) =>
       (await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === info.botId).tasks.find((task: any) => task.threadId === threadId);
 
-    // The second conversation comes through the same POST the panel's "New conversation" uses.
+    // The second conversation comes through the same POST "New conversation" uses.
     const busyThread = (await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === info.botId).threadId;
     const otherThread = (await api("POST", `/api/bots/${info.botId}/tasks`, {})).task.threadId;
     await openConversations(info.ui, "Pepper");
@@ -165,6 +173,7 @@ describe("the thinking timer stays anchored across a thread switch", () => {
     // the renderer before sending the turn whose stamp this case observes.
     await selectThread(busyThread);
     await waitUntil(() => isCurrent(busyThread), 10_000, "the original thread to become current");
+    await closeConversations();
 
     await ui("type", info.ui, "--name", "Message Pepper", "--text", "hello");
     await ui("press", info.ui, "--keys", "Enter");
@@ -187,6 +196,7 @@ describe("the thinking timer stays anchored across a thread switch", () => {
     await new Promise((done) => setTimeout(done, 3_000));
     await selectThread(busyThread);
     await waitUntil(() => isCurrent(busyThread), 10_000, "the busy thread to become current again");
+    await closeConversations();
 
     // A restart would show single digits after a 13+ second turn.
     const resumed = await waitUntil(timerText, 10_000, "the thinking readout to appear again");

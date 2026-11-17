@@ -20,20 +20,20 @@ describe("named links into a bot's settings", () => {
     expect(Object.keys(dispatch.mock.calls[0]![0])).not.toContain("botId");
   });
 
-  it("lands the access callers on the Simple page that holds what they are about, else on the Computer tab", () => {
+  it("lands the access callers on the Simple page that holds what they are about, else on the Computer section of Bot settings", () => {
     expect(linkTarget("access", link({ section: "access", page: "apps" }))).toEqual({ tab: "details", page: "apps" });
-    expect(linkTarget("access", link({ section: "access", page: "folder" }))).toEqual({ tab: "library", page: "folder" });
-    // MCP servers are listed on the apps page; Simple mode has no tool-selection page, so that link opens the Computer tab.
+    expect(linkTarget("access", link({ section: "access", page: "folder" }))).toEqual({ tab: "details", page: "folder" });
+    // MCP servers are listed on the apps page; Simple mode has no tool-selection page, so that link opens the Computer section.
     expect(linkTarget("access", link({ section: "access", page: "mcp" }))).toEqual({ tab: "details", page: "apps" });
-    expect(linkTarget("access", link({ section: "access", page: "tools" }))).toEqual({ tab: "computer" });
-    // A plain Access link (the team map's computer button) still opens the Computer tab, where Works on lives.
-    expect(linkTarget("access", link({ section: "access" }))).toEqual({ tab: "computer" });
+    expect(linkTarget("access", link({ section: "access", page: "tools" }))).toEqual({ tab: "details", page: "settings", anchor: "computer" });
+    // A plain Access link (the team map's computer button) opens Bot settings at Computer, where Works on lives.
+    expect(linkTarget("access", link({ section: "access" }))).toEqual({ tab: "details", page: "settings", anchor: "computer" });
   });
 
   it("lands a link that names a card on that card, on its section's tab, and on no other section", () => {
-    expect(linkTarget("overview", link({ section: "overview", anchor: "conversations" }))).toEqual({ tab: "details", anchor: "conversations" });
-    expect(linkTarget("access", link({ section: "access", anchor: "conversations" }))).toEqual({ tab: "computer", anchor: "conversations" });
-    expect(linkTarget("usage", link({ section: "overview", anchor: "conversations" }))).toEqual(sectionTarget("usage"));
+    expect(linkTarget("overview", link({ section: "overview", anchor: "conversation" }))).toEqual({ tab: "details", anchor: "conversation" });
+    expect(linkTarget("access", link({ section: "access", anchor: "backups" }))).toEqual({ tab: "details", page: "settings", anchor: "backups" });
+    expect(linkTarget("usage", link({ section: "overview", anchor: "conversation" }))).toEqual(sectionTarget("usage"));
   });
 
   it("never applies a link's page to another section, and falls back to the section's own place", () => {

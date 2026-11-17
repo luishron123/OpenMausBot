@@ -54,12 +54,12 @@ export function forgetConversationLines(): void {
   asked.clear();
 }
 
-export function BotConversations({ bot }: { bot: Bot }) {
+export function BotConversations({ bot, popover = false, onPick }: { bot: Bot; popover?: boolean; onPick?: () => void }) {
   const { state, dispatch } = useStore();
   const now = useRelativeNow();
   const phone = !useMediaQuery(SIDEBAR_INLINE, true);
   const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
+  const [searching, setSearching] = useState(popover);
   const [expanded, setExpanded] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const actions = useMemo(() => {
@@ -96,15 +96,17 @@ export function BotConversations({ bot }: { bot: Bot }) {
   const project = bot.projects?.find((folder) => folder.id === bot.tasks?.find((task) => task.threadId === bot.threadId)?.projectId);
 
   const closeOnPhone = () => {
-    if (phone) dispatch({ type: "toggleSettings", open: false });
+    if (phone && !popover) dispatch({ type: "toggleSettings", open: false });
   };
   const select = (task: { threadId: string }) => {
     if (task.threadId !== bot.threadId) openBotThread(dispatch, bot, task.threadId, false);
     closeOnPhone();
+    onPick?.();
   };
   const startNew = () => {
     dispatch({ type: "newTask", botId: bot.id, ...(project ? { projectId: project.id } : {}) });
     closeOnPhone();
+    onPick?.();
   };
   const stopSearching = () => {
     setQuery("");
@@ -114,6 +116,7 @@ export function BotConversations({ bot }: { bot: Bot }) {
   // An open search stays up even if archiving leaves one conversation, so it can still be cleared.
   // An archived open conversation stays listed too, so it is not hidden while it is open.
   const listed = conversations.length >= 2 || searching || conversations.some((task) => task.threadId === bot.threadId && isArchived(task));
+  const searchShown = listed && searching && (!popover || conversations.length >= 2 || needle !== "");
   const row = (task: (typeof threads)[number]) => (
     <div role="listitem" key={task.threadId} data-conversation={task.threadId}>
       <SidebarThreadRow panel preview={preview(task.threadId)} task={task} ownerId={bot.id} current={task.threadId === bot.threadId}
@@ -122,8 +125,8 @@ export function BotConversations({ bot }: { bot: Bot }) {
   );
 
   return (
-    <section data-panel-card="conversations" aria-label={t("botPanel.conversations.title")}>
-      <CardLabel action={listed && (
+    <section data-panel-card={popover ? undefined : "conversations"} aria-label={t("botPanel.conversations.title")}>
+      {!popover && <CardLabel action={listed && (
         <button
           type="button"
           data-conversations-search
@@ -135,7 +138,7 @@ export function BotConversations({ bot }: { bot: Bot }) {
         >
           <Search size={14} aria-hidden="true" />
         </button>
-      )}>{t("botPanel.conversations.title")}</CardLabel>
+      )}>{t("botPanel.conversations.title")}</CardLabel>}
       <div className={cn("flex items-center gap-2", listed && "mb-2")}>
         {bot.yourAccess !== "view" && side !== "team" && (
           <button
@@ -150,18 +153,20 @@ export function BotConversations({ bot }: { bot: Bot }) {
           </button>
         )}
       </div>
-      {listed && searching && (
+      {searchShown && (
         <input
-          autoFocus
+          autoFocus={!popover}
           type="search"
           data-conversations-query
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
+            // In the header's list a second Escape, on an empty search, is the list's own: it closes.
+            if (event.key !== "Escape" || (popover && query === "")) return;
             event.preventDefault();
             event.stopPropagation();
-            stopSearching();
+            if (popover) setQuery("");
+            else stopSearching();
           }}
           placeholder={t("botPanel.conversations.searchPlaceholder", { name: bot.name })}
           aria-label={t("botPanel.conversations.searchPlaceholder", { name: bot.name })}
