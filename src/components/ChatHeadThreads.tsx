@@ -54,6 +54,7 @@ export function ChatHeadThreads({ bot, className }: { bot: Bot; className?: stri
   const focusSheet = useRef(false);
   const typed = useRef<Typeahead | null>(null);
   const asked = useSyncExternalStore(subscribe, snapshot, () => null);
+  const listed = useRef(bot.id);
   const open = place !== null;
 
   const close = () => setPlace(null);
@@ -66,12 +67,13 @@ export function ChatHeadThreads({ bot, className }: { bot: Bot; className?: stri
     close();
   };
 
+  // One effect, in this order: a request that arrives with the switch to its bot must open after the switch closes.
   useEffect(() => {
-    if (!asked || asked.botId !== bot.id) return;
+    if (listed.current !== bot.id) { listed.current = bot.id; close(); }
+    if (!asked || asked !== request || asked.botId !== bot.id) return;
     request = null;
     if (Date.now() - asked.at < REQUEST_MS) show();
   }, [asked, bot.id]);
-  useEffect(() => close(), [bot.id]);
   useEffect(() => {
     if (!open) return;
     if (focusSheet.current) { focusSheet.current = false; sheet.current?.querySelector<HTMLElement>(STOPS)?.focus(); }

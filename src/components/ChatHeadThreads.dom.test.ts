@@ -210,6 +210,30 @@ describe("the conversations list on the chat header's pill", () => {
     expect(sheet()?.getAttribute("data-chathead-threads-sheet")).toBe("research");
   });
 
+  it("opens for a request made before its header came on screen", async () => {
+    showBotConversations("research");
+    render(research());
+    await settle();
+    expect(sheet()?.getAttribute("data-chathead-threads-sheet")).toBe("research");
+  });
+
+  it("opens for a request that arrives with the switch to its bot, and not again when the header comes back to it", async () => {
+    await open(research({ id: "writer", name: "Writer" }));
+    flushSync(() => {
+      showBotConversations("research");
+      root.render(createElement("div", null, createElement(ChatHeadThreads, { bot: research() })));
+    });
+    await settle();
+    expect(sheet()?.getAttribute("data-chathead-threads-sheet")).toBe("research");
+
+    render(research({ id: "writer", name: "Writer" }));
+    await settle();
+    expect(sheet()).toBeNull();
+    render(research());
+    await settle();
+    expect(sheet()).toBeNull();
+  });
+
   it("drops a request whose header never came on screen", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
