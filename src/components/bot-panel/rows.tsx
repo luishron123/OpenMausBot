@@ -40,14 +40,15 @@ export function LabelAction({ children, onClick, ...rest }: { children: ReactNod
   );
 }
 
-export function Card({ label, action, anchor, children }: { label?: ReactNode; action?: ReactNode; anchor?: string; children: ReactNode }) {
+/** `flat` draws the rows straight on the panel, as the Details tab does: no surface, no dividers. */
+export function Card({ label, action, anchor, flat = false, children }: { label?: ReactNode; action?: ReactNode; anchor?: string; flat?: boolean; children: ReactNode }) {
   const advanced = useAdvancedMode();
   return (
-    <section data-panel-card={anchor}>
-      {label ? <CardLabel action={action}>{label}</CardLabel> : <div className="h-3.5" />}
+    <section data-panel-card={anchor} className={flat ? "scroll-mt-11" : undefined}>
+      {label ? <CardLabel action={action}>{label}</CardLabel> : !flat && <div className="h-3.5" />}
       <div
         data-panel-card-surface=""
-        className={cn(
+        className={flat ? "[&>a]:rounded-[8px] [&>button]:rounded-[8px]" : cn(
           "divide-y divide-ink/[0.05] overflow-hidden max-md:rounded-[16px] max-md:border-hairline max-md:bg-card",
           advanced ? "rounded-[12px] border border-ink/[0.04] bg-ink/[0.03]" : "rounded-[12px] bg-composer ring-1 ring-inset ring-ink/[0.06] max-md:border max-md:ring-0",
         )}

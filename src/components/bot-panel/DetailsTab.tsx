@@ -7,14 +7,15 @@ import { useChatMoreItems } from "../ChatMoreMenu";
 import { EffortRow, ModelPicker } from "../ModelPicker";
 import type { SidebarMenuItem } from "../SidebarPopoverMenu";
 import type { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
-import { BotConversations } from "./Conversations";
+import { ApprovalCard, InstructionsCard, RepliesCard } from "./BehaviorCards";
+import { KeepsCard } from "./KeepsCard";
 import type { SimplePageId } from "./page-registry";
 import { TryAsking } from "./TryAsking";
 import { Card, CardLabel, LabelAction, panelActionCls, NavRow, RowIcon, rowCls, RowText } from "./rows";
 
 type Derived = ReturnType<typeof useBotSettingsDerived>;
 
-export const CONVERSATION_ITEMS = ["find", "start-fresh", "share-team", "share-person", "usage", "activity", "inspector"];
+export const CONVERSATION_ITEMS = ["find", "start-fresh", "usage", "activity", "inspector", "share-team", "share-person"];
 
 /** A ⋯ menu item drawn as a panel row: the same label, icon, value and handler. */
 export function ItemRow({ item }: { item: SidebarMenuItem }) {
@@ -40,10 +41,12 @@ export function ItemRow({ item }: { item: SidebarMenuItem }) {
   );
 }
 
-export function DetailsTab({ bot, derived, onOpen }: {
+export function DetailsTab({ bot, derived, onOpen, editingInstructions, onEditInstructions }: {
   bot: Bot;
   derived: Derived;
   onOpen: (page: SimplePageId) => void;
+  editingInstructions?: boolean;
+  onEditInstructions?: (open: boolean) => void;
 }) {
   const { items } = useChatMoreItems(bot);
   const { dispatch } = useStore();
@@ -72,16 +75,10 @@ export function DetailsTab({ bot, derived, onOpen }: {
         />
       </section>
 
-      <BotConversations bot={bot} />
-
-      <TryAsking bot={bot} />
-
-      {conversationItems.length > 0 && (
-        <section data-panel-card="conversation">
-          <CardLabel>{t("botPanel.section.conversation")}</CardLabel>
-          {conversationItems.map((item) => <ItemRow key={item.key} item={item} />)}
-        </section>
-      )}
+      <InstructionsCard bot={bot} derived={derived} editing={editingInstructions} onEdit={onEditInstructions} />
+      <ApprovalCard bot={bot} derived={derived} />
+      <RepliesCard bot={bot} derived={derived} />
+      <KeepsCard bot={bot} flat onOpen={onOpen} />
 
       {derived.botRoutines.length === 0 ? (
         <section data-panel-empty="routines">
@@ -109,6 +106,15 @@ export function DetailsTab({ bot, derived, onOpen }: {
             onClick={() => onOpen("routines")}
           />
         </Card>
+      )}
+
+      <TryAsking bot={bot} />
+
+      {conversationItems.length > 0 && (
+        <section data-panel-card="conversation">
+          <CardLabel>{t("botPanel.section.conversation")}</CardLabel>
+          {conversationItems.map((item) => <ItemRow key={item.key} item={item} />)}
+        </section>
       )}
     </div>
   );

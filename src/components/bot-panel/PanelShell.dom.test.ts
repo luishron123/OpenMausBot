@@ -28,14 +28,13 @@ vi.mock("../Avatar", () => ({ BotAvatar: () => null, MausAvatar: () => null }));
 vi.mock("../AvatarImageGenerator", () => ({ AvatarImageGenerator: () => null }));
 vi.mock("@/lib/use-organization-branding", () => ({ useOrganizationBranding: () => null }));
 const stub = (name: string) => (props: Record<string, unknown>) =>
-  createElement("div", { [`data-stub-${name}`]: true, "data-editing-instructions": props.editingInstructions === true ? "true" : undefined });
+  createElement("div", { [`data-stub-${name}`]: true, "data-editing-instructions": props.editingInstructions === true ? "true" : undefined },
+    createElement("section", { "data-panel-card": "approval" }));
 vi.mock("./DetailsTab", () => ({ DetailsTab: stub("details") }));
 vi.mock("./LibraryTab", () => ({ LibraryTab: stub("library") }));
-vi.mock("./ComputerTab", () => ({ ComputerTab: stub("computer") }));
 vi.mock("./pages", () => ({
-  PageBody: ({ page, editingInstructions }: { page: string; editingInstructions?: boolean }) =>
-    createElement("div", { "data-stub-page": page, "data-editing-instructions": editingInstructions === true ? "true" : undefined },
-      createElement("section", { "data-panel-card": "approval" })),
+  PageBody: ({ page }: { page: string }) =>
+    createElement("div", { "data-stub-page": page }, createElement("section", { "data-panel-card": "computer" })),
   pageSurfaceCls: "",
 }));
 
@@ -120,42 +119,75 @@ describe("named links into the bot panel", () => {
 
     flushSync(() => openBotSettings(fixture.dispatch, "access"));
     await settle();
-    expect([tab(), page()]).toEqual(["computer", null]);
+    expect(page()).toBe("settings");
+  });
+
+  it("lands a link to the old Computer tab on the Computer section of Bot settings", async () => {
+    const scrolled = vi.mocked(HTMLElement.prototype.scrollIntoView);
+    openBotSettings(fixture.dispatch, "access");
+    render("access");
+    await settle();
+    expect(page()).toBe("settings");
+    expect(host.querySelector('[data-panel-tab="computer"]')).toBeNull();
+    expect(scrolled.mock.contexts).toContain(host.querySelector('[data-panel-card="computer"]'));
+    click(host.querySelector("[data-panel-back]"));
+    expect([tab(), page()]).toEqual(["details", null]);
+  });
+
+  it.each(["where", "browser"] as const)("opens a link to the %s page with Back to Bot settings, where its row now lives", async (linked) => {
+    openBotSettings(fixture.dispatch, "access", { page: linked });
+    render("access");
+    await settle();
+    expect(page()).toBe(linked);
+    expect(host.querySelector("[data-panel-back]")!.textContent).toBe("Bot settings");
+    click(host.querySelector("[data-panel-back]"));
+    expect(page()).toBe("settings");
+    click(host.querySelector("[data-panel-back]"));
+    expect([tab(), page()]).toEqual(["details", null]);
+  });
+
+  it.each(["memory", "skills"] as const)("opens a %s link on its page, back on Details where its row now lives", async (section) => {
+    openBotSettings(fixture.dispatch, section);
+    render(section);
+    await settle();
+    expect(page()).toBe(section);
+    click(host.querySelector("[data-panel-back]"));
+    expect([tab(), page()]).toEqual(["details", null]);
   });
 
   it("follows the same link again after the panel has moved on", async () => {
     openBotSettings(fixture.dispatch, "access");
     render("access");
     await settle();
-    expect(tab()).toBe("computer");
+    expect(page()).toBe("settings");
 
-    click(host.querySelector('[data-panel-tab="details"]'));
-    expect(tab()).toBe("details");
+    click(host.querySelector("[data-panel-back]"));
+    expect([tab(), page()]).toEqual(["details", null]);
 
     flushSync(() => openBotSettings(fixture.dispatch, "access"));
     render("access");
     await settle();
-    expect(tab()).toBe("computer");
+    expect(page()).toBe("settings");
   });
 
-  it("opens Bot settings with the Instructions editor for a soul link, and closes it when the panel moves on", async () => {
+  it("opens Details with the Instructions editor for a soul link, and closes it when the panel moves on", async () => {
     openBotSettings(fixture.dispatch, "soul");
     render("soul");
     await settle();
-    expect(page()).toBe("settings");
-    expect(host.querySelector('[data-stub-page="settings"]')?.getAttribute("data-editing-instructions")).toBe("true");
+    expect([tab(), page()]).toEqual(["details", null]);
+    expect(host.querySelector("[data-stub-details]")?.getAttribute("data-editing-instructions")).toBe("true");
+    click(host.querySelector("[data-panel-gear]"));
     click(host.querySelector("[data-panel-back]"));
     expect([tab(), page()]).toEqual(["details", null]);
-    click(host.querySelector("[data-panel-gear]"));
-    expect(host.querySelector('[data-stub-page="settings"]')?.getAttribute("data-editing-instructions")).toBeNull();
+    expect(host.querySelector("[data-stub-details]")?.getAttribute("data-editing-instructions")).toBeNull();
   });
 
-  it("scrolls a permissions link to Before it acts on the Bot settings page", async () => {
+  it("scrolls a permissions link to Before it acts on the Details tab", async () => {
     const scrolled = vi.mocked(HTMLElement.prototype.scrollIntoView);
     openBotSettings(fixture.dispatch, "permissions");
     render("permissions");
     await settle();
-    expect(page()).toBe("settings");
+    expect([tab(), page()]).toEqual(["details", null]);
     expect(scrolled.mock.contexts).toContain(host.querySelector('[data-panel-card="approval"]'));
   });
 
@@ -170,17 +202,17 @@ describe("named links into the bot panel", () => {
 });
 
 describe("the panel's tabs", () => {
-  it("are Details, Library and Computer, opening on Details, each drawing its own tab", async () => {
+  it("are Details and Library, opening on Details, each drawing its own tab", async () => {
     render(null);
     await settle();
     expect([...host.querySelectorAll('[role="tab"]')].map((element) => [element.getAttribute("data-panel-tab"), element.textContent]))
-      .toEqual([["details", "Details"], ["library", "Library"], ["computer", "Computer"]]);
+      .toEqual([["details", "Details"], ["library", "Library"]]);
     expect(tab()).toBe("details");
     const strip = host.querySelector('[role="tablist"]')!.className.split(" ");
     expect(strip).toEqual(expect.arrayContaining(["sticky", "top-0", "bg-app"]));
     expect(host.querySelector('[role="tab"]')!.parentElement!.className.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "bg-ink/[0.05]"]));
     expect(host.querySelector('[role="tab"]')!.className.split(" ")).toEqual(expect.arrayContaining(["h-[26px]", "text-[13px]", "bg-ink/[0.1]", "font-medium"]));
-    for (const id of ["library", "computer", "details"]) {
+    for (const id of ["library", "details"]) {
       click(host.querySelector(`[data-panel-tab="${id}"]`));
       expect(tab()).toBe(id);
       expect(host.querySelector(`[data-stub-${id}]`), id).not.toBeNull();
@@ -205,7 +237,7 @@ describe("the panel's top", () => {
   it("opens Bot settings from the gear on any tab, with Back to Details", async () => {
     render(null);
     await settle();
-    click(host.querySelector('[data-panel-tab="computer"]'));
+    click(host.querySelector('[data-panel-tab="library"]'));
     click(host.querySelector("[data-panel-gear]"));
     expect(page()).toBe("settings");
     expect(host.querySelector("[data-panel-gear]")!.getAttribute("aria-current")).toBe("page");
@@ -309,10 +341,10 @@ describe("Escape in the bot panel", () => {
     back?.focus();
     const event = press(back, "Escape");
     expect(event.defaultPrevented).toBe(true);
-    expect([tab(), page()]).toEqual(["library", null]);
+    expect([tab(), page()]).toEqual(["details", null]);
     expect(dialogCloses).not.toHaveBeenCalled();
     // On a tab, Escape is the dialog's: it closes the panel.
-    press(host.querySelector('[data-panel-tab="library"]'), "Escape");
+    press(host.querySelector('[data-panel-tab="details"]'), "Escape");
     expect(dialogCloses).toHaveBeenCalledTimes(1);
   });
 
@@ -337,7 +369,7 @@ describe("Escape in the bot panel", () => {
     expect(menu()).toBeNull();
     expect(page()).toBe("skills");
     press(moreButton(), "Escape");
-    expect([tab(), page()]).toEqual(["library", null]);
+    expect([tab(), page()]).toEqual(["details", null]);
     expect(dialogCloses).not.toHaveBeenCalled();
   });
 });
