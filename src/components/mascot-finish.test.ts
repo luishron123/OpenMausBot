@@ -88,12 +88,12 @@ describe("the mascot finish", () => {
 });
 
 describe("the glass finish", () => {
-  it("runs every bot colour from a lighter stop to a deeper one", () => {
+  it("runs every bot colour from a lighter stop into a second hue", () => {
     for (const fill of Object.values(MAUS_COLORS)) {
       const stops = finishGradient(fill, "glass");
       for (const stop of stops) expect(stop).toMatch(/^#[0-9a-f]{6}$/);
       expect(luma(stops[0])).toBeGreaterThan(luma(stops[1]));
-      expect(luma(stops[1])).toBeGreaterThan(luma(stops[2]));
+      expect(stops[2]).not.toBe(stops[1]);
     }
   });
 
@@ -104,13 +104,22 @@ describe("the glass finish", () => {
   it("draws the rim inside the body's own clip on every body, so the outline does not grow", () => {
     for (const id of MASCOT_BODY_IDS) {
       const markup = svg({ size: 44, silhouette: MASCOT_BODIES[id] });
-      expect(markup).toMatch(/<g clip-path="url\(#[^)]+-clip\)" opacity="1"><use href="#[^"]+-shape"[^>]*fill="none" stroke="url\(#[^)]+-rim\)"/);
+      expect(markup).toMatch(/<g clip-path="url\(#[^)]+-clip\)" opacity="1" fill="none" stroke="url\(#[^)]+-rim\)"[^>]*><use href="#[^"]+-shape"/);
       expect(markup.split(MASCOT_BODIES[id].clip).length - 1).toBe(2);
     }
   });
 
+  it("keeps the outer halo inside the margin around the body", () => {
+    for (const id of MASCOT_BODY_IDS) {
+      const markup = svg({ size: 96, silhouette: MASCOT_BODIES[id] });
+      const scale = Number(/scale\(([\d.]+)\)/.exec(MASCOT_BODIES[id].fit)![1]);
+      const widths = [...markup.matchAll(/<use href="#[^"]+-shape"[^>]*stroke-width="([\d.]+)"><\/use>/g)].map((m) => Number(m[1]) * scale);
+      expect(Math.max(...widths) / 2).toBeLessThan(15);
+    }
+  });
+
   it("keeps the rim the same width on screen whatever the body's fit scale", () => {
-    const width = (id: "cursor" | "circle") => Number(/stroke-width="([\d.]+)" stroke-linejoin/.exec(svg({ size: 44, silhouette: MASCOT_BODIES[id] }))![1]);
+    const width = (id: "cursor" | "circle") => Number(/-rim\)"[^>]*><use [^>]*stroke-width="([\d.]+)"/.exec(svg({ size: 44, silhouette: MASCOT_BODIES[id] }))![1]);
     const scale = (id: "cursor" | "circle") => Number(/scale\(([\d.]+)\)/.exec(MASCOT_BODIES[id].fit)![1]);
     expect(width("cursor") * scale("cursor")).toBeCloseTo(width("circle") * scale("circle"), 5);
   });
@@ -122,14 +131,14 @@ describe("the glass finish", () => {
   });
 
   it("fades the fine details in between 20 and 28 px instead of switching them on", () => {
-    const rimOpacity = (size: number) => Number(/<g clip-path="[^"]+" opacity="([\d.]+)"><use/.exec(svg({ size }))![1]);
+    const rimOpacity = (size: number) => Number(/<g clip-path="[^"]+" opacity="([\d.]+)" fill="none"/.exec(svg({ size }))![1]);
     expect([21, 24, 27, 28, 96].map(rimOpacity)).toEqual([0.125, 0.5, 0.875, 1, 1]);
-    expect(svg({ size: 24 })).toContain('stroke-opacity="0.12"');
+    expect(svg({ size: 24 })).toContain('stroke-opacity="0.15" stroke-width="11"');
   });
 
   it("halos white eyes only", () => {
-    expect(svg({ size: 96 })).toContain('stroke-opacity="0.24"');
-    expect(svg({ size: 96, eyeColor: "#000000" })).not.toContain("stroke-opacity");
+    expect(svg({ size: 96 })).toContain('stroke-opacity="0.3" stroke-width="11"');
+    expect(svg({ size: 96, eyeColor: "#000000" })).not.toContain('stroke-width="11"');
   });
 
   it("paints nothing over a picture body", () => {
