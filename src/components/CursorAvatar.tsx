@@ -17,7 +17,7 @@ import {
 } from "./cursor-face-data"
 import { GLYPH_EASE_MS, MOTION, VIEW_SPAN, bodyTransform, faceTravelUnits, frameFloorMs, morphUnitsPerMs, nextFrameAt, nextMascotFrame, type BodyMotion } from "./mascot-motion"
 import { mascotClock, usePrefersReducedMotion, type MascotTicket } from "./mascot-clock"
-import { finishPaint } from "./mascot-finish"
+import { finishPaint, type MascotFinish } from "./mascot-finish"
 
 export { MOTION, bodyTransform, type BodyMotion }
 export {
@@ -904,7 +904,7 @@ export interface CursorAvatarProps {
   silhouette?: CursorSilhouette
   gradient?: [string, string, string]
   picture?: string | null
-  eyeColor?: string
+  eyeColor?: string; finish?: MascotFinish
   title?: string | null
   className?: string
   style?: React.CSSProperties
@@ -938,7 +938,7 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
       paused = false,
       silhouette = DEFAULT_SILHOUETTE,
       gradient = DEFAULT_GRADIENT, picture,
-      eyeColor = "#ffffff",
+      eyeColor, finish: finishName,
       title,
       className,
       style,
@@ -1240,7 +1240,7 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
     const dimension = typeof size === 'number' ? `${size}px` : size
     const label = title === undefined ? mascotLabel(silhouette.name) : title
     const body = silhouette.body.replace(/\{\{GRADIENT\}\}/g, `url(#${uid}-grad)`)
-    const finish = finishPaint({ uid, gradient, silhouette, sizePx: props.sizePx, eyeColor, bodyIsPicture: Boolean(picture) })
+    const finish = finishPaint({ uid, gradient, silhouette, sizePx: props.sizePx, chosenFaceInk: eyeColor, bodyIsPicture: Boolean(picture) }, finishName)
 
     return (
       <svg
@@ -1266,18 +1266,18 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
         <g transform={flip ? `translate(${FACE_BOX} 0) scale(-1 1)` : undefined}>
           <g ref={trailLayer} />
           <g ref={bodyGroup}>
-          <g ref={bodyContent}>
+          <g ref={bodyContent}>{finish.underBody}
           {picture ? <image href={picture} x="-15" y="-15" width={VIEW_SPAN} height={VIEW_SPAN} preserveAspectRatio="none" /> : <g transform={silhouette.fit || undefined} dangerouslySetInnerHTML={{ __html: body }} />}
           {finish.overBody}
           <g clipPath={`url(#${uid}-clip)`} visibility={picture ? 'hidden' : undefined}>
             <g transform={anchorTransform(silhouette.anchor)}>
-              <path ref={eye0} fill={eyeColor} {...finish.eye} />
-              <path ref={eye1} fill={eyeColor} {...finish.eye} />
+              <path ref={eye0} fill={finish.faceInk} {...finish.eye} />
+              <path ref={eye1} fill={finish.faceInk} {...finish.eye} />
               {showMouth && (
                 <path
                   ref={mouth}
                   fill="none"
-                  stroke={eyeColor}
+                  stroke={finish.faceInk}
                   strokeWidth={mouthStroke}
                   strokeLinecap="round"
                 />
