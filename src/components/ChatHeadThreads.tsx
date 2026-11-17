@@ -132,7 +132,7 @@ export function ChatHeadThreads({ bot, className }: { bot: Bot; className?: stri
           focusSheet.current = event.detail === 0;
           show();
         }}
-        className={cn("flex shrink-0 items-center justify-center self-stretch rounded-full ps-1 pe-2.5 text-ink-tertiary hover:text-ink aria-expanded:text-ink", ELEVATED_TINT, className)}
+        className={cn("flex shrink-0 items-center justify-center self-stretch rounded-full ps-1 pe-2.5 text-ink-tertiary touch:min-h-10 touch:min-w-10 hover:text-ink aria-expanded:text-ink", ELEVATED_TINT, className)}
       >
         <ChevronDown size={14} aria-hidden="true" className={cn("transition-transform duration-150 motion-reduce:transition-none", open && "rotate-180")} />
       </button>

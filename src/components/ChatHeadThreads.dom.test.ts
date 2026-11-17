@@ -178,6 +178,12 @@ describe("the conversations list on the chat header's pill", () => {
     expect(document.activeElement).toBe(trigger());
   });
 
+  it("gives the chevron a touch-sized target", () => {
+    render(research());
+    expect(trigger().className).toContain("touch:min-w-10");
+    expect(trigger().className).toContain("touch:min-h-10");
+  });
+
   it("jumps to a conversation by its first letters, but not while the person types in the search", async () => {
     await open();
     rows()[0]!.focus();
