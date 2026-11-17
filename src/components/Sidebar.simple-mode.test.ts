@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState, type AppState, type Bot, type Group } from "@/state/store";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
 
-const fixture = vi.hoisted(() => ({ advanced: false, showThreads: true, admin: true as boolean | null, state: {} as Partial<AppState>, dispatch: vi.fn() }));
+const fixture = vi.hoisted(() => ({ advanced: false, showThreads: true, admin: true as boolean | null, state: {} as Partial<AppState>, dispatch: vi.fn(), showConversations: vi.fn() }));
+vi.mock("./ChatHeadThreads", async (original) => ({ ...await original<typeof import("./ChatHeadThreads")>(), showBotConversations: fixture.showConversations }));
 vi.mock("@/lib/interface-mode", async (original) => ({
   ...await original<typeof import("@/lib/interface-mode")>(),
   useAdvancedMode: () => fixture.advanced,
@@ -457,10 +458,9 @@ describe("bot-first sidebar", () => {
 
     fixture.dispatch.mockClear();
     named("View threads")!.props.onClick!({} as MouseEvent);
-    expect(fixture.dispatch.mock.calls).toEqual([
-      [{ type: "select", id: bot.id }],
-      [{ type: "toggleSettings", open: true, section: "history", botId: bot.id }],
-    ]);
+    // The conversations are listed on the chat header's pill, so the bot's chat comes on screen and its list opens there.
+    expect(fixture.dispatch.mock.calls).toEqual([[{ type: "select", id: bot.id }]]);
+    expect(fixture.showConversations).toHaveBeenCalledExactlyOnceWith(bot.id);
 
     fixture.dispatch.mockClear();
     const setMain = named("Set as main thread")!;
