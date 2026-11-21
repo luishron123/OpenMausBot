@@ -15,7 +15,7 @@ const request: Message = { id: "r1", role: "bot", kind: "text", at: 1_000, text:
 const answer: Message = { id: "a1", role: "bot", kind: "text", at: 2_000, text: "The export is right." };
 const other: Message = { id: "r2", role: "bot", kind: "text", at: 3_000, text: "@Engineer A different request, not shown.",
   from: { botId: "pepper", name: "Pepper", color: "blue" }, roomRequest: { id: "h2", phase: "request" } };
-const held = (status: BotConversationState["status"], ...messages: Message[]): BotConversationState => ({ threadId: "t", loadId: 1, status, messages });
+const held = (status: BotConversationState["status"], ...messages: Message[]): BotConversationState => ({ threadId: "t", loadId: 1, status, messages, pending: {} });
 
 function view(conversation: BotConversationState | null, handoff = line()) {
   return renderToStaticMarkup(createElement(BotConversationView, {
@@ -56,6 +56,18 @@ describe("BotConversationStatus", () => {
     expect(html).toContain('data-handoff-status="failed"');
     expect(html).toContain("text-danger");
     expect(botConversationStatusText(line({ state: "done", forPerson: { name: "Ana" } }), 1_000)).toBe("Done · for Ana");
+  });
+
+  it("ends work in someone else's private chat as a plain failure: no reason, no stop, no duration", () => {
+    const hidden = line({ state: "failed", at: 181_000, forPerson: { name: "Ana", private: true } });
+    expect(botConversationStatusText(hidden, 1_000)).toBe("Failed · for Ana (private)");
+    // A server that predates the rule may still send the mark; the reader must not learn it.
+    const marked = { ...hidden, stopped: true as const };
+    expect(botConversationStatusText(marked, 1_000)).toBe("Failed · for Ana (private)");
+    const html = renderToStaticMarkup(createElement(BotConversationStatus, { line: marked, startedAt: 1_000 }));
+    expect(html).toContain('data-handoff-status="failed"');
+    expect(html).not.toContain("Stopped");
+    expect(html).not.toContain(" min<");
   });
 
   it("speaks Portuguese", () => {
@@ -116,6 +128,16 @@ describe("BotConversationView", () => {
     expect(html).not.toContain("data-bot-conversation-thread");
     expect(html).not.toContain("made a request");
     expect(html).toContain("Talk to Pepper");
+  });
+
+  it("says only that private work failed when its conversation cannot be read", () => {
+    const html = view(held("denied"), line({ state: "failed", at: 181_000, forPerson: { name: "Ana", private: true } }));
+    expect(html).toContain("You can&#x27;t open this conversation.");
+    expect(html).toMatch(/data-handoff-status="failed"[^>]*>(<span[^>]*><\/span>)?<span[^>]*>Failed · for Ana \(private\)</);
+    expect(html).not.toContain("Failed:");
+    expect(html).not.toContain("Stopped");
+    expect(html).not.toContain("data-from=");
+    expect(html).not.toContain("data-bot-conversation-thread");
   });
 
   it("says it is loading before the thread arrives", () => {

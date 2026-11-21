@@ -18,11 +18,17 @@ import { handoffStateText, handoffStatusText } from "./HandoffStatusChip";
 
 export type ConversationBot = Pick<Bot, "name" | "color"> & Partial<Bot>;
 
+/** Work in someone else's private chat ends as a plain failure for its readers: neither why nor that it was stopped. */
+function wasStopped(line: HandoffStatusLine): boolean {
+  return Boolean(line.stopped) && !line.forPerson?.private;
+}
+
 /** Who stopped a hand-off is not recorded, so a stopped one names nobody. */
 export function botConversationStatusText(line: HandoffStatusLine, startedAt: number): string {
-  const took = line.state === "done" || line.stopped ? handoffDuration(startedAt, line.at) : null;
+  const stopped = wasStopped(line);
+  const took = line.state === "done" || stopped ? handoffDuration(startedAt, line.at) : null;
   const duration = took && t(took.unit === "hours" ? "chat.botConversation.hours" : "chat.botConversation.minutes", { count: took.count });
-  if (line.stopped) return handoffStatusText(line, duration ? t("chat.botConversation.stoppedAfter", { duration }) : t("chat.botConversation.stopped"));
+  if (stopped) return handoffStatusText(line, duration ? t("chat.botConversation.stoppedAfter", { duration }) : t("chat.botConversation.stopped"));
   if (line.state === "done" && duration) return handoffStatusText(line, t("chat.botConversation.doneIn", { duration }));
   return handoffStatusText(line, handoffStateText(line));
 }
@@ -36,12 +42,12 @@ const TONE: Record<HandoffStatusLine["state"], string> = {
 };
 
 export function BotConversationStatus({ line, startedAt, wrap = false }: { line: HandoffStatusLine; startedAt: number; wrap?: boolean }) {
-  const text = botConversationStatusText(line, startedAt);
-  const failed = line.state === "failed" && !line.stopped;
+  const text = botConversationStatusText(line, startedAt), stopped = wasStopped(line);
+  const failed = line.state === "failed" && !stopped;
   return (
-    <span data-handoff-status={line.stopped ? "stopped" : line.state} title={wrap ? undefined : text} role="status"
+    <span data-handoff-status={stopped ? "stopped" : line.state} title={wrap ? undefined : text} role="status"
       className={cn("flex min-w-0 max-w-full gap-1.5 text-[12px] leading-4 text-ink-secondary", wrap ? "items-start" : "items-center", failed && "text-danger")}>
-      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", wrap && "mt-1", line.stopped ? "bg-ink-tertiary" : TONE[line.state],
+      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", wrap && "mt-1", stopped ? "bg-ink-tertiary" : TONE[line.state],
         line.state === "working" && "animate-pulse motion-reduce:animate-none")} />
       <span className={cn("min-w-0", wrap ? "[overflow-wrap:anywhere]" : "truncate")}>{text}</span>
     </span>
