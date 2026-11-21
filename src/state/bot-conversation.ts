@@ -7,6 +7,8 @@ export interface BotConversationState {
   threadId: string;
   loadId: number;
   messages: Message[];
+  /** Patches that came while loading, by row id: applied only to a row the loaded thread turns out to hold. */
+  pending: Record<string, Message>;
   /** `denied`: the thread could not be read, so nothing of it is shown, live rows included. */
   status: "loading" | "ready" | "denied";
 }
@@ -21,23 +23,24 @@ export type BotConversationEvent =
 export function reduceBotConversation(state: BotConversationState | null, event: BotConversationEvent): BotConversationState | null {
   switch (event.type) {
     case "open":
-      return { threadId: event.threadId, loadId: event.loadId, messages: [], status: "loading" };
+      return { threadId: event.threadId, loadId: event.loadId, messages: [], pending: {}, status: "loading" };
     case "loaded": {
       if (state?.threadId !== event.threadId || state.loadId !== event.loadId) return state;
       const live = new Map(state.messages.map((message) => [message.id, message]));
       const loaded = new Set(event.messages.map((message) => message.id));
-      return { ...state, status: "ready", messages: [...event.messages.map((message) => live.get(message.id) ?? message),
+      return { ...state, status: "ready", pending: {}, messages: [...event.messages.map((message) => live.get(message.id) ?? state.pending[message.id] ?? message),
         ...state.messages.filter((message) => !loaded.has(message.id))] };
     }
     case "loadFailed":
-      return state?.threadId === event.threadId && state.loadId === event.loadId ? { ...state, status: "denied", messages: [] } : state;
+      return state?.threadId === event.threadId && state.loadId === event.loadId ? { ...state, status: "denied", messages: [], pending: {} } : state;
     case "message": {
       if (state?.threadId !== event.threadId || state.status === "denied") return state;
       if (state.messages.some((message) => message.id === event.message.id)) {
         return { ...state, messages: state.messages.map((message) => message.id === event.message.id ? event.message : message) };
       }
-      // A patch of a row the loaded thread does not hold is not a new row.
-      return event.patch && state.status === "ready" ? state : { ...state, messages: [...state.messages, event.message] };
+      if (!event.patch) return { ...state, messages: [...state.messages, event.message] };
+      // A patch of a row the thread does not hold is not a new row: while loading it waits for the load to confirm the row.
+      return state.status === "loading" ? { ...state, pending: { ...state.pending, [event.message.id]: event.message } } : state;
     }
     case "close":
       return null;

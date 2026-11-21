@@ -8,7 +8,7 @@ const ready = (...messages: Message[]) => reduceBotConversation(open(), { type: 
 
 describe("reduceBotConversation", () => {
   it("opens loading and holds the loaded thread", () => {
-    expect(open()).toEqual({ threadId: "t", loadId: 1, messages: [], status: "loading" });
+    expect(open()).toEqual({ threadId: "t", loadId: 1, messages: [], pending: {}, status: "loading" });
     expect(ready(row("a"), row("b"))).toMatchObject({ status: "ready", messages: [row("a"), row("b")] });
   });
 
@@ -38,6 +38,26 @@ describe("reduceBotConversation", () => {
     const state = ready(row("a"));
     expect(reduceBotConversation(state, { type: "message", threadId: "t", message: row("z"), patch: true })).toBe(state);
     expect(reduceBotConversation(state, { type: "message", threadId: "other", message: row("z") })).toBe(state);
+  });
+
+  it("does not turn a patch that arrived while loading into a row the loaded thread does not hold", () => {
+    let state = reduceBotConversation(open(), { type: "message", threadId: "t", message: row("unknown"), patch: true })!;
+    expect(state.messages).toEqual([]);
+    state = reduceBotConversation(state, { type: "loaded", threadId: "t", loadId: 1, messages: [] })!;
+    expect(state).toMatchObject({ status: "ready", messages: [], pending: {} });
+  });
+
+  it("applies a patch that arrived while loading to the row once the loaded thread holds it", () => {
+    let state = reduceBotConversation(open(), { type: "message", threadId: "t", message: row("b", "patched"), patch: true })!;
+    state = reduceBotConversation(state, { type: "loaded", threadId: "t", loadId: 1, messages: [row("a"), row("b", "stale")] })!;
+    expect(state).toMatchObject({ status: "ready", messages: [row("a"), row("b", "patched")], pending: {} });
+  });
+
+  it("patches a row created while loading at once, and keeps it after the load", () => {
+    let state = reduceBotConversation(open(), { type: "message", threadId: "t", message: row("new") })!;
+    state = reduceBotConversation(state, { type: "message", threadId: "t", message: row("new", "patched"), patch: true })!;
+    state = reduceBotConversation(state, { type: "loaded", threadId: "t", loadId: 1, messages: [row("a")] })!;
+    expect(state.messages).toEqual([row("a"), row("new", "patched")]);
   });
 
   it("holds nothing of a thread that could not be read, live rows included", () => {
