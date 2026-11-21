@@ -155,7 +155,11 @@ again, and a repeat after it finished or failed runs again only with
 `rework=true`. Room requests continue to use their explicit destination
 thread.
 
-The chat shows an avatar and “Sent to Eli · Delivery”; clicking opens the
+The sending bot's own chat shows one line, “Eli helping <sender> · View
+conversation”, with the work's status under it; **View conversation** opens
+that hand-off read-only over the chat, and **Open thread** inside it goes to
+the receiving conversation ([hand-off status](handoff-status.md)). A room
+shows an avatar and “Sent to Eli · Delivery” instead; clicking opens the
 receiving conversation. Same-room receipts have no unnecessary navigation.
 Receipts remain visible when tool calls are hidden. A bare path in a brief only
 works when the recipient can already read it; to give a teammate a file the
@@ -178,8 +182,8 @@ deleted; the rest of a conversation's folder stays, as before.
 Returned reports stay available to subsequent model turns behind the compact
 receipt, subject to the bounded retention and a fresh reach check (archived
 bots, audiences).
-Direct-chat receipts use the existing avatar/thread pill, opening the exact
-recipient task without changing other tasks.
+A direct chat's **Open thread**, like the avatar/thread pill wherever that
+still shows, opens the exact recipient task without changing other tasks.
 
 Steering is not cancelling. A message sent while teammates are still working
 runs straight away — it is not queued behind them — and the assignments stay
@@ -258,7 +262,8 @@ room's thread. Each job runs in a thread of its own on its member, opened by
 the requester from the room (titled "<room> · <brief>", in the room's
 working folder), so the members work side by side:
 
-- The room shows "Sent to <member>" with a link to that thread, then one
+- The room shows "Sent to <member>" with a link to that thread (the pill, in
+  a room: the one-line "View conversation" form is for a bot's own chat), then one
   result card per job as it finishes (`roomRequest.phase: "result"`, the
   report's text and the thread link). The requester resumes once, in the
   room, with every result, and a finished job's thread folds away.
