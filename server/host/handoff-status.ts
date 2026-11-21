@@ -63,12 +63,13 @@ export function handoffLine(node: HandoffNode, facts: HandoffLineFacts, at: numb
       : { kind: "bot", name: facts.waitingBots.length > 2 ? `${facts.waitingBots.slice(0, 2).join(", ")} +${facts.waitingBots.length - 2}` : facts.waitingBots.join(", ") };
   }
   if (state === "failed" && !facts.forPerson?.private) line.why = whyFailed(node);
+  if (node.status === "cancelled" && node.outcome === "stopped") line.stopped = true;
   if (facts.forPerson) line.forPerson = facts.forPerson;
   return line;
 }
 
 const sameLine = (a: HandoffStatusLine | undefined, b: HandoffStatusLine) =>
-  a !== undefined && a.state === b.state && a.why === b.why && JSON.stringify(a.waitingOn) === JSON.stringify(b.waitingOn)
+  a !== undefined && a.state === b.state && a.why === b.why && a.stopped === b.stopped && JSON.stringify(a.waitingOn) === JSON.stringify(b.waitingOn)
   && JSON.stringify(a.forPerson) === JSON.stringify(b.forPerson);
 
 const ended = (line: HandoffStatusLine) => line.state === "done" || line.state === "failed";

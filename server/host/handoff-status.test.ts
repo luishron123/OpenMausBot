@@ -25,6 +25,13 @@ describe("handoffLine", () => {
     expect(handoffLine(node({ status: "cancelled", outcome: "stopped" }), { waitingBots: [] }, at)).toMatchObject({ state: "failed", why: "Stopped" });
   });
 
+  it("marks a hand-off a person stopped, and no other ending", () => {
+    expect(handoffLine(node({ status: "cancelled", outcome: "stopped" }), { waitingBots: [] }, 1).stopped).toBe(true);
+    expect(handoffLine(node({ status: "cancelled", outcome: "stopped" }), { waitingBots: [], forPerson: { name: "Ada", private: true } }, 1)).toEqual({ id: "a1", state: "failed", stopped: true, forPerson: { name: "Ada", private: true }, at: 1 });
+    expect(handoffLine(node({ status: "cancelled" }), { waitingBots: [] }, 1).stopped).toBeUndefined();
+    expect(handoffLine(node({ status: "failed", outcomeDetail: "The engine stalled" }), { waitingBots: [] }, 1).stopped).toBeUndefined();
+  });
+
   it("reads a wait whose teammates all answered as working: it is about to resume", () => {
     expect(handoffLine(node({ status: "waiting" }), { waitingBots: [] }, 1)).toEqual({ id: "a1", state: "working", at: 1 });
   });
