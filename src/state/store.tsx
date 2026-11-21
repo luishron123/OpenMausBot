@@ -3,6 +3,7 @@ import { api, ApiError, retryRequest, snapshotArrays } from "./api";
 import { capHeldInBackground, loadOlderPage, MESSAGE_PAGE_SIZE, olderThanHeld, reduceOlderMessages, reduceTrimHeldMessages } from "./message-history";
 import { readChatSnapshot } from "./chat-snapshot";
 import { followHeldTails, noteAppPagePatch } from "./held-tails";
+import { noteBotConversationFrame } from "./bot-conversation";
 export { MESSAGE_PAGE_SIZE } from "./message-history";
 import { addForkOptimistic, reduceForkPanel, removeForkOptimistic, runForkEffect, type ForkPanelAction, type ForkPanelState } from "./fork-panel";
 import { use, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -3052,6 +3053,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ) {
         bumpPeripheralVersion("webhooks");
       }
+      noteBotConversationFrame(frame);
       switch (frame.kind) {
         case "sections":
           rawDispatch({ type: "sections", sections: frame.sections });
