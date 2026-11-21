@@ -5,6 +5,7 @@ import { t } from "@/lib/i18n";
 import { activityText } from "@/lib/activity-text";
 import { cn } from "@/lib/cn";
 import { BotAvatar } from "./Avatar";
+import { BotConversationRow } from "./BotConversationRow";
 import { HandoffReply } from "./HandoffReply";
 import { HandoffStatusChip } from "./HandoffStatusChip";
 
@@ -18,6 +19,16 @@ export function ThreadChip({ message, threadId }: { message: Message; threadId?:
   const direct = message.sentDirectly;
   const label = !direct ? activityText(tool, tool.name)
     : direct.room ? t("chat.sentDirectlyNotInRoom", { name: direct.name, room: direct.room }) : t("chat.sentDirectly", { name: direct.name });
+  const sender = message.from;
+  const requester = state.bots.find((candidate) => candidate.id === sender?.botId) ?? sender;
+  if (message.handoff && !direct && bot && requester && sender?.botId !== bot.id) {
+    return (
+      <HandoffReply message={message} threadId={threadId}>
+        <BotConversationRow handoff={message.handoff} startedAt={message.at} threadId={ref.threadId} requester={requester} peer={bot}
+          onOpenThread={() => openThread(dispatch, ref, state, showThreads)} />
+      </HandoffReply>
+    );
+  }
   return (
     <HandoffReply message={message} threadId={threadId}>
       <span className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1">

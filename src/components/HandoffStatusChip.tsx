@@ -18,8 +18,7 @@ export function handoffStateText(line: HandoffStatusLine): string {
 }
 
 /** The chip's whole text: the state, and on a Team Cloud whose request it is. */
-export function handoffStatusText(line: HandoffStatusLine): string {
-  const state = handoffStateText(line);
+export function handoffStatusText(line: HandoffStatusLine, state = handoffStateText(line)): string {
   const person = line.forPerson;
   if (!person) return state;
   return t(person.private ? "chat.handoff.forPrivate" : "chat.handoff.for", { status: state, name: person.name });
