@@ -79,6 +79,11 @@ describe("BotConversationRow", () => {
     expect(dialog()?.querySelector("textarea, input")).toBeNull();
   });
 
+  it("starts focus on Close, so a keyboard's ring is drawn on a control and not around the dialog", async () => {
+    await open();
+    expect(document.activeElement).toBe(dialog()!.querySelector('[aria-label="Close"]'));
+  });
+
   it("closes on Escape and gives focus back to the row", async () => {
     await open();
     dialog()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));

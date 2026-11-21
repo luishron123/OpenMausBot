@@ -94,6 +94,19 @@ describe("BotConversationView", () => {
     expect(html).not.toContain("A different request");
   });
 
+  it("draws them as the chat draws a conversation: the request in the own bubble, the answer in a bot's", () => {
+    const html = view(held("ready", request, answer, other));
+    expect(html).toMatch(/data-from="requester" class="[^"]*items-end[^"]*">.*?<div dir="auto" data-chat-bubble="simple"[^>]*class="[^"]*bg-bubble-user/);
+    expect(html).toMatch(/data-from="peer" class="[^"]*items-start[^"]*">.*?<div dir="auto" data-chat-bubble="simple"[^>]*class="[^"]*bg-card/);
+    expect(html).toContain("bg-app");
+  });
+
+  it("names a bot once for a run of its lines", () => {
+    const html = view(held("ready", request, { ...answer, id: "progress", text: "Reading it now." }, answer));
+    expect(html.match(/data-from="peer"/g)).toHaveLength(2);
+    expect(html.match(/<time/g)).toHaveLength(2);
+  });
+
   it("marks the day the conversation happened", () => {
     const now = Date.now();
     expect(view(held("ready", { ...request, at: now }, { ...answer, at: now })).match(/Today/g)).toHaveLength(1);

@@ -1,5 +1,5 @@
 // "View conversation": one hand-off between two bots, read only, in a dialog over the chat that asked for it.
-import { Fragment, useEffect, useId, useMemo, useRef } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, type CSSProperties, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import type { HandoffStatusLine } from "../../shared/handoff-status";
@@ -7,11 +7,15 @@ import { closeBotConversation, openBotConversation, useBotConversation, type Bot
 import { formatTime, type Bot } from "@/state/store";
 import { botConversationLines, handoffDuration, requestSummary, type BotConversationLine } from "@/lib/bot-conversation";
 import { useModalDialog } from "@/hooks/use-modal-dialog";
+import { useAdvancedMode } from "@/lib/interface-mode";
 import { MAUS_COLORS } from "@/lib/mascot";
+import { useColorUserBubbles } from "@/lib/user-bubble-preference";
+import { userBubbleStyle } from "@/lib/user-bubble-tone";
 import { localDay } from "@/lib/transcript-derivations";
-import { t } from "@/lib/i18n";
+import { intlLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { BotAvatar } from "./Avatar";
+import { ADVANCED_BOT_BUBBLE, ADVANCED_BUBBLE_FRAME, ADVANCED_USER_BUBBLE, joinedCorners, SIMPLE_BOT_BUBBLE, SIMPLE_BUBBLE_MAX, SIMPLE_STACKED, SIMPLE_USER_BUBBLE, type BubbleJoin } from "./chat-bubble";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { DaySeparator } from "./DaySeparator";
 import { handoffStateText, handoffStatusText } from "./HandoffStatusChip";
@@ -54,25 +58,26 @@ export function BotConversationStatus({ line, startedAt, wrap = false }: { line:
   );
 }
 
-function nameStyle(bot: ConversationBot) {
-  return Object.hasOwn(MAUS_COLORS, bot.color) && bot.color !== "chrome"
-    ? { color: `color-mix(in srgb, ${MAUS_COLORS[bot.color]} 55%, var(--color-ink))` } : undefined;
-}
-
 function Face({ bot, size }: { bot: ConversationBot; size: number }) {
   return <BotAvatar bot={bot} state="happy" size={size} motion="none" motionKey={0} animated={false} />;
 }
 
-function Bubble({ line, bot }: { line: BotConversationLine; bot: ConversationBot }) {
+/** The chat's own bubbles: the bot that asked on the far side, as the person's words are in a chat, and the bot that answers on the near one. */
+function Line({ line, bot, join, simple, askedStyle }: { line: BotConversationLine; bot: ConversationBot; join: BubbleJoin; simple: boolean; askedStyle?: CSSProperties }) {
+  const asked = line.from === "requester";
   return (
-    <li data-from={line.from} className="flex flex-col gap-1">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Face bot={bot} size={16} />
-        <span className="min-w-0 truncate text-[13px] font-semibold text-ink-secondary" style={nameStyle(bot)}>{bot.name}</span>
-        <time className="shrink-0 text-[12px] font-medium text-ink-tertiary">{formatTime(line.at)}</time>
-      </div>
-      <div dir="auto" className={cn("w-fit min-w-0 max-w-full rounded-4xl px-3 py-2 text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]",
-        line.from === "requester" ? "bg-menu-active" : "bg-inset")}>
+    <li data-from={line.from} className={cn("flex flex-col", asked ? "items-end" : "items-start", join.above && SIMPLE_STACKED)}>
+      {!join.above && (
+        <div className="mb-1 flex min-w-0 max-w-full items-center gap-1.5 px-0.5">
+          <Face bot={bot} size={20} />
+          <span className="bot-identity min-w-0 truncate text-[13px] font-semibold text-ink-secondary" data-bot-color={bot.color}>{bot.name}</span>
+          <time className="shrink-0 text-[12px] font-medium leading-4 text-ink-tertiary">{formatTime(line.at)}</time>
+        </div>
+      )}
+      <div dir="auto" data-chat-bubble={simple ? "simple" : ""} title={new Date(line.at).toLocaleString(intlLocale())} style={asked ? askedStyle : undefined}
+        className={cn("w-fit [overflow-wrap:anywhere]", simple ? SIMPLE_BUBBLE_MAX : ADVANCED_BUBBLE_FRAME,
+          asked ? cn(simple ? SIMPLE_USER_BUBBLE : ADVANCED_USER_BUBBLE, askedStyle && "user-bubble-colored") : simple ? SIMPLE_BOT_BUBBLE : ADVANCED_BOT_BUBBLE,
+          simple && joinedCorners(asked ? "end" : "start", join))}>
         <ChatMarkdown text={line.text} />
       </div>
     </li>
@@ -90,13 +95,18 @@ export interface BotConversationProps {
   onTalk: () => void;
 }
 
-export function BotConversationView({ conversation, handoff, startedAt, requester, peer, onClose, onOpenThread, onTalk, titleId }:
-  BotConversationProps & { conversation: BotConversationState | null; titleId: string }) {
+export function BotConversationView({ conversation, handoff, startedAt, requester, peer, onClose, onOpenThread, onTalk, titleId, closeRef }:
+  BotConversationProps & { conversation: BotConversationState | null; titleId: string; closeRef?: RefObject<HTMLButtonElement | null> }) {
   const status = conversation?.status ?? "loading";
   const lines = useMemo(() => status === "ready" ? botConversationLines(conversation?.messages ?? [], handoff.id, { botId: peer.id, name: peer.name }) : [],
     [conversation?.messages, status, handoff.id, peer.id, peer.name]);
   const summary = requestSummary(lines);
   const today = localDay(Date.now());
+  const newDay = (index: number) => index === 0 || localDay(lines[index]!.at) !== localDay(lines[index - 1]!.at);
+  const joined = (index: number) => index > 0 && index < lines.length && lines[index]!.from === lines[index - 1]!.from && !newDay(index);
+  const simple = !useAdvancedMode();
+  const tinted = useColorUserBubbles() && Object.hasOwn(MAUS_COLORS, requester.color);
+  const askedStyle = useMemo(() => tinted ? userBubbleStyle(requester.color, { flat: simple }) : undefined, [tinted, requester.color, simple]);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const body = bodyRef.current;
@@ -110,19 +120,19 @@ export function BotConversationView({ conversation, handoff, startedAt, requeste
           <span className="-ms-2 flex"><Face bot={peer} size={28} /></span>
         </span>
         <div className="min-w-0 flex-1">
-          <h2 id={titleId} className="truncate text-[20px] font-semibold tracking-[-0.01em]">{t("chat.botConversation.title", { requester: requester.name, peer: peer.name })}</h2>
+          <h2 id={titleId} className="truncate text-[17px] font-semibold tracking-[-0.01em]">{t("chat.botConversation.title", { requester: requester.name, peer: peer.name })}</h2>
           {summary && <p dir="auto" data-bot-conversation-request className="truncate text-[13px] text-ink-secondary">{summary}</p>}
           <p data-bot-conversation-count className="text-[12px] leading-4 text-ink-tertiary">
             {status !== "ready" ? t("chat.botConversation.kind")
               : t(lines.length === 1 ? "chat.botConversation.count.one" : "chat.botConversation.count", { count: lines.length })}
           </p>
         </div>
-        <button type="button" onClick={onClose} title={t("common.close")} aria-label={t("common.close")} className="ui-icon-button shrink-0">
+        <button ref={closeRef} type="button" onClick={onClose} title={t("common.close")} aria-label={t("common.close")} className="ui-icon-button shrink-0">
           <X size={16} aria-hidden="true" />
         </button>
       </header>
       <div className="ui-modal-divider shrink-0" />
-      <div ref={bodyRef} data-bot-conversation-body className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
+      <div ref={bodyRef} data-bot-conversation-body className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-app px-5 py-4">
         {status === "denied" ? <p data-bot-conversation-denied className="text-[13px] text-ink-secondary">{t("chat.botConversation.denied")}</p> : (
           <>
             <p className="text-center text-[12px] leading-4 text-ink-tertiary">
@@ -133,11 +143,11 @@ export function BotConversationView({ conversation, handoff, startedAt, requeste
                 <Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />{t("chat.botConversation.loading")}
               </p>
             ) : (
-              <ol className="flex flex-col gap-3">
+              <ol className="flex flex-col gap-4">
                 {lines.map((line, index) => (
                   <Fragment key={line.id}>
-                    {(index === 0 || localDay(line.at) !== localDay(lines[index - 1]!.at)) && <li><DaySeparator at={line.at} today={today} simple /></li>}
-                    <Bubble line={line} bot={line.from === "requester" ? requester : peer} />
+                    {newDay(index) && <li><DaySeparator at={line.at} today={today} simple={simple} /></li>}
+                    <Line line={line} bot={line.from === "requester" ? requester : peer} join={{ above: joined(index), below: joined(index + 1) }} simple={simple} askedStyle={askedStyle} />
                   </Fragment>
                 ))}
               </ol>
@@ -160,6 +170,8 @@ export function BotConversationDialog({ threadId, ...props }: BotConversationPro
   const { onClose } = props;
   const dialogRef = useRef<HTMLDivElement | null>(null);
   useModalDialog(dialogRef, onClose);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => closeRef.current?.focus(), []);
   const titleId = useId();
   const held = useBotConversation();
   const conversation = held?.threadId === threadId ? held : null;
@@ -171,7 +183,7 @@ export function BotConversationDialog({ threadId, ...props }: BotConversationPro
     <div className="ui-scrim fixed inset-0 z-[60] flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-bot-conversation={threadId}
         className="ui-modal flex max-h-full w-full max-w-[560px] flex-col text-ink shadow-2xl outline-none animate-pop-in motion-reduce:animate-none">
-        <BotConversationView {...props} conversation={conversation} titleId={titleId} />
+        <BotConversationView {...props} conversation={conversation} titleId={titleId} closeRef={closeRef} />
       </div>
     </div>,
     document.body,
