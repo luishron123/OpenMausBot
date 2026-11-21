@@ -15,7 +15,7 @@ import { localDay } from "@/lib/transcript-derivations";
 import { intlLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { BotAvatar } from "./Avatar";
-import { ADVANCED_BOT_BUBBLE, ADVANCED_BUBBLE_FRAME, ADVANCED_USER_BUBBLE, joinedCorners, SIMPLE_BOT_BUBBLE, SIMPLE_BUBBLE_MAX, SIMPLE_STACKED, SIMPLE_USER_BUBBLE, type BubbleJoin } from "./chat-bubble";
+import { ADVANCED_BOT_BUBBLE, ADVANCED_BUBBLE_FRAME, ADVANCED_USER_BUBBLE, joinedCorners, SIMPLE_BOT_BUBBLE, SIMPLE_BUBBLE_MAX, SIMPLE_STACKED, SIMPLE_USER_BUBBLE, STAMP_GAP_MS, type BubbleJoin } from "./chat-bubble";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { DaySeparator } from "./DaySeparator";
 import { handoffStateText, handoffStatusText } from "./HandoffStatusChip";
@@ -103,7 +103,8 @@ export function BotConversationView({ conversation, handoff, startedAt, requeste
   const summary = requestSummary(lines);
   const today = localDay(Date.now());
   const newDay = (index: number) => index === 0 || localDay(lines[index]!.at) !== localDay(lines[index - 1]!.at);
-  const joined = (index: number) => index > 0 && index < lines.length && lines[index]!.from === lines[index - 1]!.from && !newDay(index);
+  const joined = (index: number) => index > 0 && index < lines.length && lines[index]!.from === lines[index - 1]!.from && !newDay(index)
+    && lines[index]!.at - lines[index - 1]!.at < STAMP_GAP_MS;
   const simple = !useAdvancedMode();
   const tinted = useColorUserBubbles() && Object.hasOwn(MAUS_COLORS, requester.color);
   const askedStyle = useMemo(() => tinted ? userBubbleStyle(requester.color, { flat: simple }) : undefined, [tinted, requester.color, simple]);

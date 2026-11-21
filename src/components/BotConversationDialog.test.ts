@@ -107,6 +107,13 @@ describe("BotConversationView", () => {
     expect(html.match(/<time/g)).toHaveLength(2);
   });
 
+  it("names it again, with the time, after a quiet spell", () => {
+    const late = { ...answer, id: "late", at: answer.at + 5 * 3_600_000, text: "One more thing." };
+    const html = view(held("ready", request, { ...answer, id: "progress", text: "Reading it now." }, answer, late));
+    expect(html.match(/data-from="peer"/g)).toHaveLength(3);
+    expect(html.match(/<time/g)).toHaveLength(3);
+  });
+
   it("marks the day the conversation happened", () => {
     const now = Date.now();
     expect(view(held("ready", { ...request, at: now }, { ...answer, at: now })).match(/Today/g)).toHaveLength(1);
