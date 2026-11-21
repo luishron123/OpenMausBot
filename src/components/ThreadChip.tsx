@@ -4,6 +4,7 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import { activityText } from "@/lib/activity-text";
 import { cn } from "@/lib/cn";
+import { showsBotConversation } from "@/lib/bot-conversation";
 import { BotAvatar } from "./Avatar";
 import { BotConversationRow } from "./BotConversationRow";
 import { HandoffReply } from "./HandoffReply";
@@ -26,7 +27,7 @@ export function ThreadChip({ message, threadId, conversation = false }: {
     : direct.room ? t("chat.sentDirectlyNotInRoom", { name: direct.name, room: direct.room }) : t("chat.sentDirectly", { name: direct.name });
   const sender = message.from;
   const requester = state.bots.find((candidate) => candidate.id === sender?.botId) ?? sender;
-  if (conversation && message.handoff && !direct && bot && requester && sender?.botId !== bot.id) {
+  if (conversation && message.handoff && bot && requester && showsBotConversation(message, state.bots)) {
     return (
       <HandoffReply message={message} threadId={threadId}>
         <BotConversationRow handoff={message.handoff} startedAt={message.at} threadId={ref.threadId} requester={requester} peer={bot}

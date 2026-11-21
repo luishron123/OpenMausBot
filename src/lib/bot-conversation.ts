@@ -58,3 +58,18 @@ export function handoffDuration(startedAt: number, endedAt: number): { unit: "mi
   if (!Number.isFinite(minutes) || minutes < 1) return null;
   return minutes < 60 ? { unit: "minutes", count: minutes } : { unit: "hours", count: Math.floor(minutes / 60) };
 }
+
+type HandoffRow = Pick<Message, "id" | "handoff" | "threadRef" | "sentDirectly" | "from" | "roomRequest" | "attachments">;
+
+/** Whether a sent row reads as the conversation line: a hand-off from one bot to another bot the reader can see. */
+export function showsBotConversation(message: HandoffRow, bots: readonly { id: string }[]): boolean {
+  const ref = message.threadRef, sender = message.from;
+  return Boolean(message.handoff && ref && sender && !message.sentDirectly && sender.botId !== ref.botId && bots.some((bot) => bot.id === ref.botId));
+}
+
+/** The chat without the result rows whose hand-off already has its conversation line; a result that carries files stays. */
+export function withoutShownHandoffResults<Row extends HandoffRow>(messages: Row[], bots: readonly { id: string }[]): Row[] {
+  const shown = new Set(messages.filter((message) => showsBotConversation(message, bots)).map((message) => message.handoff!.id));
+  if (!shown.size) return messages;
+  return messages.filter((message) => !(message.roomRequest?.phase === "result" && shown.has(message.roomRequest.id) && !message.attachments?.length));
+}

@@ -63,7 +63,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { LiveToolsContext, useLiveToolIds } from "@/hooks/use-live-tool-ids";
 import { VoiceNoteBubble, type VoiceNoteAttachment } from "./VoiceNoteBubble";
 import { RawMarkdownView, RawToggleAction } from "./RawMarkdownToggle";
-import { ThreadChip } from "./ThreadChip"; import { CheckBackLine } from "./CheckBackLine";
+import { ThreadChip } from "./ThreadChip"; import { withoutShownHandoffResults } from "@/lib/bot-conversation"; import { CheckBackLine } from "./CheckBackLine";
 import { HandoffChip } from "./HandoffReply"; import { TeammateChip } from "./TeammateChip"; import { useTeammates } from "@/state/team-people"; import type { MentionPeer } from "@/lib/mentions";
 import { NewConversationInstead } from "./NewConversationInstead";
 import { VerifyCard } from "./VerifyCard";
@@ -809,8 +809,9 @@ export const ChatView = memo(function ChatView({ bot: profile, inForkPanel = fal
   useChatFindRequests(bot.threadId, findOpen, setFindOpen);
   useChatFindShortcut(inForkPanel, state.forkPanelOpen, setFindOpen);
 
+  const bots = useStoreSelector((s) => s.bots, sameDrawnBots);
   const { messages: allMessages, activeLeafId } = bot;
-  const messages = useMemo(() => visibleMessages({ messages: allMessages, activeLeafId }), [allMessages, activeLeafId]), chatMessages = useMemo(() => chatActivityMessages(messages, advanced, activity, bot.pinnedMessageId), [advanced, activity, messages, bot.pinnedMessageId]);
+  const messages = useMemo(() => visibleMessages({ messages: allMessages, activeLeafId }), [allMessages, activeLeafId]), chatMessages = useMemo(() => chatActivityMessages(withoutShownHandoffResults(messages, bots), advanced, activity, bot.pinnedMessageId), [advanced, activity, messages, bot.pinnedMessageId, bots]);
   const lookups = useMemo(() => transcriptLookups(allMessages, messages), [allMessages, messages]);
   const liveTools = useLiveToolIds(messages, bot);
   const recordedRun = useMemo(() => runSteps(messages, liveTools), [messages, liveTools]);
@@ -850,7 +851,6 @@ export const ChatView = memo(function ChatView({ bot: profile, inForkPanel = fal
     [messages],
   ); const unreadDivider = useUnreadDivider({ threadId: bot.threadId, messages: chatMessages, following });
 
-  const bots = useStoreSelector((s) => s.bots, sameDrawnBots);
   const teammates = useTeammates(); const mentionPeers = useMemo(() => [...bots.filter((peer) => peer.id !== bot.id), ...teammates.peers], [bots, bot.id, teammates]);
   const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
   const showToolCalls = showToolCallsEnabled(state.config) && (!advanced || activity.tools);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { botConversationLines, handoffDuration, requestSummary, withoutMention } from "./bot-conversation";
+import { botConversationLines, withoutShownHandoffResults, handoffDuration, requestSummary, withoutMention } from "./bot-conversation";
 
 const peer = { botId: "engineer", name: "Engineer" };
 const pepper = { botId: "pepper", name: "Pepper", color: "blue" as const };
@@ -96,5 +96,32 @@ describe("handoffDuration", () => {
     expect(handoffDuration(0, 59 * 60_000)).toEqual({ unit: "minutes", count: 59 });
     expect(handoffDuration(0, 150 * 60_000)).toEqual({ unit: "hours", count: 2 });
     expect(handoffDuration(10, 5)).toBeNull();
+  });
+});
+
+describe("withoutShownHandoffResults", () => {
+  const bots = [{ id: "pepper" }, { id: "engineer" }];
+  const from = { botId: "pepper", name: "Pepper", color: "orange" };
+  const threadRef = { botId: "engineer", threadId: "t1", title: "work" };
+  const sent = (id: string, extra: object = {}) => ({ id: `sent-${id}`, from, threadRef, handoff: { id, state: "done" as const, at: 2 }, ...extra });
+  const result = (id: string, extra: object = {}) => ({ id: `result-${id}`, threadRef, roomRequest: { id, phase: "result" as const }, ...extra });
+  const said = { id: "said" };
+
+  it("drops the result row of a hand-off that already has its conversation line", () => {
+    const rows = [sent("a"), said, result("a")];
+    expect(withoutShownHandoffResults(rows, bots).map((row) => row.id)).toEqual(["sent-a", "said"]);
+  });
+
+  it("keeps a result that carries files, and results of hand-offs drawn the old way", () => {
+    const withFiles = result("a", { attachments: [{ id: "f", name: "report.pdf", kind: "file" }] });
+    const direct = sent("b", { sentDirectly: { name: "Engineer" } });
+    const unseen = sent("c", { threadRef: { botId: "hidden", threadId: "t2", title: "x" } });
+    const rows = [sent("a"), withFiles, direct, result("b"), unseen, result("c"), result("d")];
+    expect(withoutShownHandoffResults(rows, bots).map((row) => row.id)).toEqual(["sent-a", "result-a", "sent-b", "result-b", "sent-c", "result-c", "result-d"]);
+  });
+
+  it("returns the same list when no hand-off has a conversation line", () => {
+    const rows = [said, result("a")];
+    expect(withoutShownHandoffResults(rows, bots)).toBe(rows);
   });
 });
