@@ -11,7 +11,7 @@ export interface HandoffStatusLine {
   waitingOn?: { kind: "bot" | "person"; name?: string };
   /** Failed: one line saying why. */
   why?: string;
-  /** Failed because a person stopped it. Readers that predate this field see a plain failure whose `why` says so. */
+  /** Failed because a person stopped it; left out wherever `why` is. Readers that predate this field see a plain failure whose `why` says so. */
   stopped?: true;
   /** On a Team Cloud: whose request this is. `private`: it runs in their private chat, so a shared place shows only this. */
   forPerson?: { name: string; private?: true };

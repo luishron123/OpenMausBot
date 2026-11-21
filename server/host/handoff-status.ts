@@ -62,8 +62,10 @@ export function handoffLine(node: HandoffNode, facts: HandoffLineFacts, at: numb
       ? { kind: "person", ...(facts.askedPerson ? { name: facts.askedPerson } : {}) }
       : { kind: "bot", name: facts.waitingBots.length > 2 ? `${facts.waitingBots.slice(0, 2).join(", ")} +${facts.waitingBots.length - 2}` : facts.waitingBots.join(", ") };
   }
-  if (state === "failed" && !facts.forPerson?.private) line.why = whyFailed(node);
-  if (node.status === "cancelled" && node.outcome === "stopped") line.stopped = true;
+  if (state === "failed" && !facts.forPerson?.private) {
+    line.why = whyFailed(node);
+    if (node.status === "cancelled" && node.outcome === "stopped") line.stopped = true;
+  }
   if (facts.forPerson) line.forPerson = facts.forPerson;
   return line;
 }
