@@ -18,6 +18,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 vi.mock("@/lib/thread-preferences", () => ({ useShowThreads: () => fixture.showThreads }));
 import { ThreadChip } from "./ThreadChip";
+import { PeerMessagesContext } from "./PeerExchange";
 
 const receipt = (threadId = "qa-245"): Message => ({
   id: "receipt", role: "bot", kind: "activity", at: 3,
@@ -118,6 +119,23 @@ describe("ThreadChip", () => {
     expect(markup).toContain('data-handoff-status="working"');
     expect(markup).not.toContain("data-thread-chip");
     expect(markup).not.toContain("Sent to Scout");
+  });
+
+  it("draws the result of that hand-off inside its line: the reply is opened there and the result row says where it went", () => {
+    const result: Message = { ...receipt(), id: "result", tool: { name: "Scout replied", ok: true, output: " Final total: 42 " }, roomRequest: { id: "h1", phase: "result" } };
+    const line = sent({ id: "sent", handoff: { id: "h1", state: "done", at: 4 } });
+    const draw = (message: Message, transcript: Message[], conversation = true) =>
+      renderToStaticMarkup(createElement(PeerMessagesContext, { value: transcript }, createElement(ThreadChip, { message, conversation })));
+    expect(draw(result, [line, result])).toBe('<span hidden="" data-shown-in="sent"></span>');
+    expect(draw(line, [line, result])).toContain('data-bot-conversation-reply="h1"');
+    expect(draw(line, [line, result])).toContain("View reply");
+    expect(draw(line, [line, result])).not.toContain("Final total: 42");
+    // Alone on its page, in a room, or with nothing to read: each row keeps what it showed before.
+    expect(draw(result, [result])).toContain("Scout replied");
+    expect(draw(result, [result])).toContain("Final total: 42");
+    expect(draw(result, [line, result], false)).toContain("Scout replied");
+    expect(draw(line, [line])).not.toContain("data-bot-conversation-reply");
+    expect(draw(line, [line, { ...result, tool: { name: "Scout — failed", ok: false } }])).not.toContain("data-bot-conversation-reply");
   });
 
   it("keeps what the request asked for under the line", () => {

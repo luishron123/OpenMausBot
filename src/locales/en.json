@@ -2718,6 +2718,7 @@
   "chat.handoff.forPrivate": "{status} · for {name} (private)",
   "chat.botConversation.helping": "{peer} helping {requester}",
   "chat.botConversation.view": "View conversation",
+  "chat.botConversation.reply": "View reply",
   "chat.botConversation.title": "{requester} ⇄ {peer}",
   "chat.botConversation.kind": "Conversation between bots",
   "chat.botConversation.count": "Conversation between bots · {count} messages",

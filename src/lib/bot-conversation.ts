@@ -67,9 +67,17 @@ export function showsBotConversation(message: HandoffRow, bots: readonly { id: s
   return Boolean(message.handoff && ref && sender && !message.sentDirectly && sender.botId !== ref.botId && bots.some((bot) => bot.id === ref.botId));
 }
 
-/** The chat without the result rows whose hand-off already has its conversation line; a result that carries files stays. */
-export function withoutShownHandoffResults<Row extends HandoffRow>(messages: Row[], bots: readonly { id: string }[]): Row[] {
-  const shown = new Set(messages.filter((message) => showsBotConversation(message, bots)).map((message) => message.handoff!.id));
-  if (!shown.size) return messages;
-  return messages.filter((message) => !(message.roomRequest?.phase === "result" && shown.has(message.roomRequest.id) && !message.attachments?.length));
+/** The hand-off row that already speaks for this result as a conversation line, among the rows loaded with it. A result
+ *  that carries files keeps its own row, and so does one whose request is not on the page. */
+export function handoffLineOf<Row extends HandoffRow>(result: HandoffRow, messages: readonly Row[], bots: readonly { id: string }[]): Row | undefined {
+  const request = result.roomRequest;
+  if (request?.phase !== "result" || result.attachments?.length) return undefined;
+  return messages.find((message) => message.handoff?.id === request.id && showsBotConversation(message, bots));
+}
+
+/** The result row a conversation line stands in for: what the teammate handed back, already delivered to this chat. */
+export function handoffResultOf<Row extends HandoffRow>(line: HandoffRow, messages: readonly Row[], bots: readonly { id: string }[]): Row | undefined {
+  const id = line.handoff?.id;
+  if (!id || !showsBotConversation(line, bots)) return undefined;
+  return messages.find((message) => message.roomRequest?.phase === "result" && message.roomRequest.id === id && !message.attachments?.length);
 }

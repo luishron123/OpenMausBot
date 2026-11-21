@@ -116,6 +116,9 @@ export function useFocusMessage(threadId: string, ready: boolean, rootRef?: RefO
       if (cancelled) return;
       const wrapper = (rootRef?.current ?? document).querySelector<HTMLElement>(`[data-mid="${CSS.escape(focus.messageId)}"]`);
       const row = wrapper?.lastElementChild as HTMLElement | null;
+      // A row read from another one (a hand-off's result, in its conversation line) sends the jump there.
+      const shownIn = row?.dataset.shownIn;
+      if (shownIn) return dispatch({ type: "focusMessage", threadId, messageId: shownIn });
       target = focus.matchText ? row?.querySelector<HTMLElement>("[data-chat-bubble]") ?? row : row;
       if (!target) {
         if (tries++ < 20) retryTimer = setTimeout(attempt, 100);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { botConversationLines, withoutShownHandoffResults, handoffDuration, requestSummary, withoutMention } from "./bot-conversation";
+import { botConversationLines, handoffLineOf, handoffResultOf, handoffDuration, requestSummary, withoutMention } from "./bot-conversation";
 
 const peer = { botId: "engineer", name: "Engineer" };
 const pepper = { botId: "pepper", name: "Pepper", color: "blue" as const };
@@ -99,7 +99,7 @@ describe("handoffDuration", () => {
   });
 });
 
-describe("withoutShownHandoffResults", () => {
+describe("a hand-off result and its conversation line", () => {
   const bots = [{ id: "pepper" }, { id: "engineer" }];
   const from = { botId: "pepper", name: "Pepper", color: "orange" };
   const threadRef = { botId: "engineer", threadId: "t1", title: "work" };
@@ -107,21 +107,26 @@ describe("withoutShownHandoffResults", () => {
   const result = (id: string, extra: object = {}) => ({ id: `result-${id}`, threadRef, roomRequest: { id, phase: "result" as const }, ...extra });
   const said = { id: "said" };
 
-  it("drops the result row of a hand-off that already has its conversation line", () => {
-    const rows = [sent("a"), said, result("a")];
-    expect(withoutShownHandoffResults(rows, bots).map((row) => row.id)).toEqual(["sent-a", "said"]);
+  it("pairs the result row with the line of the same hand-off, both ways", () => {
+    const rows = [sent("a"), said, result("a"), sent("b"), result("b")];
+    expect(handoffLineOf(rows[2]!, rows, bots)?.id).toBe("sent-a");
+    expect(handoffResultOf(rows[0]!, rows, bots)?.id).toBe("result-a");
+    expect(handoffResultOf(rows[3]!, rows, bots)?.id).toBe("result-b");
   });
 
-  it("keeps a result that carries files, and results of hand-offs drawn the old way", () => {
+  it("leaves a result with files on its own row", () => {
     const withFiles = result("a", { attachments: [{ id: "f", name: "report.pdf", kind: "file" }] });
+    const rows = [sent("a"), withFiles];
+    expect(handoffLineOf(withFiles, rows, bots)).toBeUndefined();
+    expect(handoffResultOf(rows[0]!, rows, bots)).toBeUndefined();
+  });
+
+  it("leaves the result of a hand-off drawn the old way, or whose request is not loaded, on its own row", () => {
     const direct = sent("b", { sentDirectly: { name: "Engineer" } });
     const unseen = sent("c", { threadRef: { botId: "hidden", threadId: "t2", title: "x" } });
-    const rows = [sent("a"), withFiles, direct, result("b"), unseen, result("c"), result("d")];
-    expect(withoutShownHandoffResults(rows, bots).map((row) => row.id)).toEqual(["sent-a", "result-a", "sent-b", "result-b", "sent-c", "result-c", "result-d"]);
-  });
-
-  it("returns the same list when no hand-off has a conversation line", () => {
-    const rows = [said, result("a")];
-    expect(withoutShownHandoffResults(rows, bots)).toBe(rows);
+    const rows = [direct, result("b"), unseen, result("c"), result("d")];
+    for (const row of [rows[1]!, rows[3]!, rows[4]!]) expect(handoffLineOf(row, rows, bots)).toBeUndefined();
+    expect(handoffResultOf(direct, rows, bots)).toBeUndefined();
+    expect(handoffLineOf(said, rows, bots)).toBeUndefined();
   });
 });

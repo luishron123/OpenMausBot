@@ -14,14 +14,14 @@ import { useFocusMessage } from "./focus-message";
 let cleanup: (() => void) | undefined;
 let ranges: Array<{ start: number; end: number }>;
 let highlights: Map<string, unknown>;
-let target: { scrollIntoView: ReturnType<typeof vi.fn>; classList: { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }; querySelector: () => unknown; querySelectorAll: () => { item: () => unknown; length: number } };
+let target: { dataset: { shownIn?: string }; scrollIntoView: ReturnType<typeof vi.fn>; classList: { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }; querySelector: () => unknown; querySelectorAll: () => { item: () => unknown; length: number } };
 beforeEach(() => {
   vi.useFakeTimers();
   fixture.dispatch.mockClear();
   ranges = [];
   highlights = new Map();
   const node = { data: "alpha\nbeta a.b", length: 14 };
-  target = { scrollIntoView: vi.fn(), classList: { add: vi.fn(), remove: vi.fn() }, querySelector: () => target, querySelectorAll: () => ({ item: () => target, length: 1 }) };
+  target = { dataset: {}, scrollIntoView: vi.fn(), classList: { add: vi.fn(), remove: vi.fn() }, querySelector: () => target, querySelectorAll: () => ({ item: () => target, length: 1 }) };
   vi.stubGlobal("window", { matchMedia: () => ({ matches: true }) });
   vi.stubGlobal("NodeFilter", { SHOW_TEXT: 4 });
   vi.stubGlobal("CSS", { escape: (value: string) => value, highlights });
@@ -50,6 +50,14 @@ function focus(text: string) {
 }
 
 describe("search match highlighting", () => {
+  it("passes a jump onto the row that shows this one, without marking the row that draws nothing", () => {
+    target.dataset.shownIn = "line";
+    focus("");
+    expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith({ type: "focusMessage", threadId: "thread", messageId: "line" });
+    expect(target.scrollIntoView).not.toHaveBeenCalled();
+    expect(target.classList.add).not.toHaveBeenCalled();
+  });
+
   it("locates a copied message inside the viewed transcript", () => {
     const scoped = { querySelector: vi.fn(() => ({ lastElementChild: target })) };
     fixture.text = "";
