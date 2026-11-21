@@ -72,6 +72,17 @@ describe("request text", () => {
     expect(withoutMention("Ask @Engineer.", "Engineer")).toBe("Ask @Engineer.");
   });
 
+  it("reads the mention as the product does: whole Unicode names, any case, names of several words", () => {
+    expect(withoutMention("@Anaïs revise o texto.", "Ana")).toBe("@Anaïs revise o texto.");
+    expect(withoutMention("@Anaïs revise o texto.", "Anaïs")).toBe("revise o texto.");
+    expect(withoutMention("@José, confira.", "José")).toBe(", confira.");
+    expect(withoutMention("@Dev Front ajuste o botão.", "Dev Front")).toBe("ajuste o botão.");
+    expect(withoutMention("@Dev Frontend ajuste o botão.", "Dev Front")).toBe("@Dev Frontend ajuste o botão.");
+    expect(withoutMention("@dev front ajuste.", "Dev Front")).toBe("ajuste.");
+    expect(withoutMention("@Ana2 revise.", "Ana")).toBe("@Ana2 revise.");
+    expect(withoutMention("@ revise.", "")).toBe("@ revise.");
+  });
+
   it("is the request's first line, on one line", () => {
     expect(requestSummary(botConversationLines([request("r", "h", "@Engineer \n  Deploy   the preview.\nThen tell me.", 1)], "h", peer))).toBe("Deploy the preview.");
     expect(requestSummary([])).toBe("");

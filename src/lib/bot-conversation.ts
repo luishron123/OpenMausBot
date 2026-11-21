@@ -1,5 +1,6 @@
 // One hand-off's own conversation, cut out of the thread that did the work: a bot's thread can hold several.
 import type { WireMessage as Message } from "../../shared/wire.ts";
+import { isMentionNameContinuation } from "../../shared/mention-boundary.ts";
 
 export interface BotConversationLine {
   id: string;
@@ -11,7 +12,10 @@ export interface BotConversationLine {
 type ConversationMessage = Pick<Message, "id" | "role" | "kind" | "text" | "at" | "from" | "roomRequest" | "requestMessageId">;
 
 export function withoutMention(text: string, name: string): string {
-  return text.startsWith(`@${name}`) && !/^[\w-]/.test(text.slice(name.length + 1)) ? text.slice(name.length + 1).trimStart() : text;
+  const rest = text.slice(1);
+  const named = name !== "" && text.startsWith("@") && rest.slice(0, name.length).toLowerCase() === name.toLowerCase()
+    && !isMentionNameContinuation(rest.slice(name.length));
+  return named ? rest.slice(name.length).trimStart() : text;
 }
 
 /** The request and the written answers to it. Tool rows, digests and other requests' lines are left out. */
