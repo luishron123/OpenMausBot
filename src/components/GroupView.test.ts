@@ -46,6 +46,16 @@ describe("RoomToolChip", () => {
     expect(markup).toContain('title="Open #QA PR 245"');
   });
 
+  it("keeps work sent down a lane as the pill that opens its thread, never the line whose dialog points at a composer", () => {
+    const markup = render(chip({
+      tool: { name: "Sent to Scout", ok: true }, from: { botId: "ada", name: "Ada", color: "blue" },
+      threadRef: { botId: "scout", threadId: "lane-1", title: "Lane" }, handoff: { id: "h1", state: "working", at: 2 },
+    }));
+    expect(markup).toContain('data-thread-chip="lane-1"');
+    expect(markup).toContain('data-handoff-status="working"');
+    expect(markup).not.toContain("data-bot-conversation");
+  });
+
   it("leaves an ordinary step as a plain pill", () => {
     const markup = render(chip());
     expect(markup).not.toContain("<button");

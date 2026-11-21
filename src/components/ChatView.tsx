@@ -599,7 +599,7 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
   const { bots, dispatch, threadId } = useChatRows(), liveTools = use(LiveToolsContext);
   const tool = message.tool;
   if (!tool) return null;
-  if (message.threadRef) return <ThreadChip message={message} threadId={threadId} />; if (message.relay) return <TeammateChip message={message} />; if (message.checkBack) return <CheckBackLine line={message.checkBack} />;
+  if (message.threadRef) return <ThreadChip message={message} threadId={threadId} conversation />; if (message.relay) return <TeammateChip message={message} />; if (message.checkBack) return <CheckBackLine line={message.checkBack} />;
   const comm = message.comm;
   if (comm) return <RoomHandoffChip message={message} comm={comm} bots={bots} dispatch={dispatch} threadId={threadId} />;
   return <ToolActivity tool={tool} live={liveTools.has(message.id)} place={toolPlace(tool.name, place)} source={{ threadId, messageId: message.id }} />;

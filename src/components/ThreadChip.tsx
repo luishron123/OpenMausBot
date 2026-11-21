@@ -9,7 +9,12 @@ import { BotConversationRow } from "./BotConversationRow";
 import { HandoffReply } from "./HandoffReply";
 import { HandoffStatusChip } from "./HandoffStatusChip";
 
-export function ThreadChip({ message, threadId }: { message: Message; threadId?: string }) {
+export function ThreadChip({ message, threadId, conversation = false }: {
+  message: Message;
+  threadId?: string;
+  /** The delegating bot's own chat, where a hand-off reads as a line with its conversation; a room keeps the pill. */
+  conversation?: boolean;
+}) {
   const { state, dispatch } = useStore();
   const showThreads = useShowThreads();
   const ref = message.threadRef;
@@ -21,7 +26,7 @@ export function ThreadChip({ message, threadId }: { message: Message; threadId?:
     : direct.room ? t("chat.sentDirectlyNotInRoom", { name: direct.name, room: direct.room }) : t("chat.sentDirectly", { name: direct.name });
   const sender = message.from;
   const requester = state.bots.find((candidate) => candidate.id === sender?.botId) ?? sender;
-  if (message.handoff && !direct && bot && requester && sender?.botId !== bot.id) {
+  if (conversation && message.handoff && !direct && bot && requester && sender?.botId !== bot.id) {
     return (
       <HandoffReply message={message} threadId={threadId}>
         <BotConversationRow handoff={message.handoff} startedAt={message.at} threadId={ref.threadId} requester={requester} peer={bot}

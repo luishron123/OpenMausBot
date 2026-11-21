@@ -110,7 +110,7 @@ describe("ThreadChip", () => {
   });
 
   it("shows a hand-off to another bot as one line with a way into the conversation, not a pill out of the chat", () => {
-    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: sent() }));
+    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: sent(), conversation: true }));
     expect(markup).toContain('data-bot-conversation-row="h1"');
     expect(markup).toContain('data-bot-conversation-open="qa-245"');
     expect(markup).toContain("View conversation");
@@ -121,24 +121,33 @@ describe("ThreadChip", () => {
   });
 
   it("keeps what the request asked for under the line", () => {
-    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ doneWhen: "the totals add up" }) }));
+    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ doneWhen: "the totals add up" }), conversation: true }));
     expect(markup).toContain("data-handoff-done-when");
     expect(markup).toContain("the totals add up");
   });
 
   it("keeps the pill that says work left the room, so that sentence is not lost", () => {
-    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ sentDirectly: { name: "Scout" } }) }));
+    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ sentDirectly: { name: "Scout" } }), conversation: true }));
     expect(markup).toContain("Sent to Scout directly");
     expect(markup).toContain('data-handoff-status="working"');
     expect(markup).not.toContain("data-bot-conversation-row");
   });
 
   it("keeps the pill for a bot's own thread and for a bot this person cannot see", () => {
-    const own = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ from: { botId: "scout", name: "Scout", color: "green" } }) }));
-    const unseen = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ threadRef: { botId: "hidden", threadId: "x", title: "X" } }) }));
+    const own = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ from: { botId: "scout", name: "Scout", color: "green" } }), conversation: true }));
+    const unseen = renderToStaticMarkup(createElement(ThreadChip, { message: sent({ threadRef: { botId: "hidden", threadId: "x", title: "X" } }), conversation: true }));
     for (const markup of [own, unseen]) {
       expect(markup).toContain("data-thread-chip");
       expect(markup).not.toContain("data-bot-conversation-row");
     }
+  });
+
+  it("keeps the pill in a room, where work sent down a lane has a thread too and the composer speaks to every bot", () => {
+    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: sent() }));
+    expect(markup).toContain('data-thread-chip="qa-245"');
+    expect(markup).toContain("Sent to Scout");
+    expect(markup).toContain('data-handoff-status="working"');
+    expect(markup).not.toContain("data-bot-conversation-row");
+    expect(markup).not.toContain("View conversation");
   });
 });
