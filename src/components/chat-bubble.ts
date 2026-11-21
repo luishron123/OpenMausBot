@@ -22,6 +22,11 @@ export const SIMPLE_BOT_BUBBLE = `${SIMPLE_BUBBLE_SHAPE} bg-card ${BOT_BUBBLE_FI
 /** Simple mode's own bubble; the bot's colour, when on, comes from its inline style. */
 export const SIMPLE_USER_BUBBLE = `${SIMPLE_BUBBLE_SHAPE} bg-bubble-user font-normal`;
 
+/** Advanced mode's bubble: its frame, the person's own fill and a bot's card. */
+export const ADVANCED_BUBBLE_FRAME = "max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))] rounded-2xl text-[15px] leading-relaxed";
+export const ADVANCED_USER_BUBBLE = "bg-bubble-user px-4 py-2.5";
+export const ADVANCED_BOT_BUBBLE = `bg-card px-4 py-2.5 text-ink ${BOT_BUBBLE_FINISH}`;
+
 /** At most 560 wide, 80% of the column, and always 82px short of it, so a reply never meets the far edge. */
 export const SIMPLE_BUBBLE_MAX = "max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct),calc(100%-82px))]";
 
@@ -29,7 +34,7 @@ export const SIMPLE_BUBBLE_MAX = "max-w-[min(var(--chat-bubble-max),var(--chat-b
 export function plainBotBubble(simple: boolean): string {
   return simple
     ? cn("chat-text w-fit whitespace-pre-wrap", SIMPLE_BUBBLE_MAX, SIMPLE_BOT_BUBBLE)
-    : `chat-text w-fit max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))] rounded-2xl bg-card ${BOT_BUBBLE_FINISH} px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-ink`;
+    : cn("chat-text w-fit whitespace-pre-wrap", ADVANCED_BUBBLE_FRAME, ADVANCED_BOT_BUBBLE);
 }
 
 /** Simple mode's transcript spaces rows 16px apart (ChatView's data-simple-rows); a row in the same group pulls up 12px, to 4px. */

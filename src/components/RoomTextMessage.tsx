@@ -20,7 +20,7 @@ import { ThreadRefText } from "./ThreadRefs";
 import { BugReportNote } from "./BugReportNote";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { MessageBoundary } from "./ChatView";
-import { BOT_BUBBLE_FINISH, SIMPLE_BOT_BUBBLE, SIMPLE_BUBBLE_MAX, SIMPLE_BUBBLE_TEXT, SIMPLE_USER_BUBBLE } from "./chat-bubble";
+import { ADVANCED_BOT_BUBBLE, ADVANCED_BUBBLE_FRAME, ADVANCED_USER_BUBBLE, SIMPLE_BOT_BUBBLE, SIMPLE_BUBBLE_MAX, SIMPLE_BUBBLE_TEXT, SIMPLE_USER_BUBBLE } from "./chat-bubble";
 import { ReplyBlocks } from "./ReplyBlocks";
 import { CopyButton, MESSAGE_ROW, MessageActions, messageActionClass, ReplyAction } from "./MessageActions";
 import { ReactAction, ReactionChips } from "./Reactions";
@@ -151,15 +151,15 @@ export const RoomTextMessage = memo(function RoomTextMessage({
           data-chat-bubble={simple ? "simple" : ""} data-look={user ? "user-bubble" : "bot-bubble"}
           className={cn(
             tabled ? "w-full" : "w-fit",
-            simple ? cn(!tabled && SIMPLE_BUBBLE_MAX, SIMPLE_BUBBLE_TEXT) : "max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))] rounded-2xl text-[15px] leading-relaxed",
+            simple ? cn(!tabled && SIMPLE_BUBBLE_MAX, SIMPLE_BUBBLE_TEXT) : ADVANCED_BUBBLE_FRAME,
             !user && emerging && !streamedReply(m.id) && "turn-answer",
             tabled || (!user && !m.text?.trim() && !m.replyToId && m.attachments?.length)
               ? "text-ink"
               : !simple && !user && isFormattedReply(m.text ?? "")
                 ? cn(formattedReplyWidth(m.text ?? ""), "px-1 text-ink")
                 : user
-                  ? cn("chat-text whitespace-pre-wrap [overflow-wrap:anywhere] text-ink", simple ? SIMPLE_USER_BUBBLE : "bg-bubble-user px-4 py-2.5")
-                  : simple ? SIMPLE_BOT_BUBBLE : cn("bg-card px-4 py-2.5 text-ink", BOT_BUBBLE_FINISH),
+                  ? cn("chat-text whitespace-pre-wrap [overflow-wrap:anywhere] text-ink", simple ? SIMPLE_USER_BUBBLE : ADVANCED_USER_BUBBLE)
+                  : simple ? SIMPLE_BOT_BUBBLE : ADVANCED_BOT_BUBBLE,
           )}
           title={new Date(m.at).toLocaleString(intlLocale())}
         >
