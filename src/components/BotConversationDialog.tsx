@@ -144,7 +144,7 @@ export function BotConversationView({ conversation, handoff, startedAt, requeste
             )}
           </>
         )}
-        <BotConversationStatus line={handoff} startedAt={startedAt} wrap />
+        <BotConversationStatus line={status === "denied" ? { ...handoff, why: undefined, stopped: undefined } : handoff} startedAt={startedAt} wrap />
       </div>
       <div className="ui-modal-divider shrink-0" />
       <footer className="flex flex-wrap items-center justify-end gap-2 px-5 py-3">

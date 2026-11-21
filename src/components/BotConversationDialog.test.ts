@@ -118,10 +118,12 @@ describe("BotConversationView", () => {
   });
 
   it("shows only the header and the state of a conversation that cannot be read", () => {
-    const html = view(held("denied"), line({ state: "failed", stopped: true }));
+    const html = view(held("denied"), line({ state: "failed", stopped: true, why: "Stopped by user" }));
     expect(html).toContain("Pepper ⇄ Engineer");
     expect(html).toContain("You can&#x27;t open this conversation.");
-    expect(html).toContain('data-handoff-status="stopped"');
+    expect(html).toContain('data-handoff-status="failed"');
+    expect(html).not.toContain("Stopped");
+    expect(html).not.toContain("Failed:");
     expect(html).toContain(">Conversation between bots<");
     expect(html).not.toContain("data-from=");
     expect(html).not.toContain("data-bot-conversation-request");
