@@ -87,7 +87,7 @@ describe("UnreadContextCard", () => {
     });
   });
 
-  it("keeps the header text-only and puts the two actions in the last row", () => {
+  it("keeps the label and time text-only, with the two actions at the end of the same row", () => {
     let jumped = 0;
     let closed = 0;
     draw(createElement(UnreadContextCard, {
@@ -105,18 +105,28 @@ describe("UnreadContextCard", () => {
 
     const actions = rendered!.querySelector<HTMLElement>("[data-unread-context-actions]");
     expect(actions).not.toBeNull();
+    expect(actions!.previousElementSibling).toBe(header);
     expect(actions!.parentElement?.lastElementChild).toBe(actions);
     const buttons = [...actions!.querySelectorAll("button")];
     expect(buttons).toHaveLength(2);
     expect(buttons[0]!.textContent).toBe(t("chat.citation.goToSource"));
-    expect(buttons[0]!.className).toContain("rounded-lg");
-    expect(buttons[0]!.className).toContain("border");
-    expect(buttons[1]!.textContent).toBe(t("common.close"));
-    expect(buttons[1]!.className).toContain("bg-accent");
+    expect(buttons[0]!.className).toContain("ui-button-sm");
+    expect(buttons[1]!.getAttribute("aria-label")).toBe(t("common.close"));
+    expect(buttons[1]!.className).toContain("ui-icon-button");
+    expect(buttons[1]!.className).not.toContain("bg-accent");
 
     act(() => buttons[0]!.click());
     act(() => buttons[1]!.click());
     expect({ jumped, closed }).toEqual({ jumped: 1, closed: 1 });
+  });
+
+  it("stays inside the conversation's column on an opaque surface", () => {
+    renderCard("正文");
+    const surface = card()!.querySelector<HTMLElement>("[data-unread-context-surface]")!;
+    const classes = surface.className.split(/\s+/);
+    expect(classes).toContain("chat-column");
+    expect(classes).toContain("bg-panel");
+    expect(classes.some((name) => /^bg-.*\/\d/.test(name))).toBe(false);
   });
 
   it("shows the first three of four citations and counts the rest", () => {
