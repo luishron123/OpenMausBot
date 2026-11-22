@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { serializeCitation, type CitationAttachment } from "@/lib/citations";
 import { t } from "@/lib/i18n";
 import type { Message } from "@/state/store";
+import { ELEVATED_FLOAT } from "./elevated";
 import { UnreadContextCard } from "./UnreadContextCard";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -110,23 +111,32 @@ describe("UnreadContextCard", () => {
     const buttons = [...actions!.querySelectorAll("button")];
     expect(buttons).toHaveLength(2);
     expect(buttons[0]!.textContent).toBe(t("chat.citation.goToSource"));
-    expect(buttons[0]!.className).toContain("ui-button-sm");
     expect(buttons[1]!.getAttribute("aria-label")).toBe(t("common.close"));
-    expect(buttons[1]!.className).toContain("ui-icon-button");
-    expect(buttons[1]!.className).not.toContain("bg-accent");
+    // One pair: neither has a border or a fill of its own at rest, and both take the same hover.
+    for (const button of buttons) {
+      const classes = button.className.split(/\s+/);
+      expect(classes).toContain("hover:bg-ink/[0.06]");
+      expect(classes).toContain("h-7");
+      expect(classes.some((name) => /^(bg-|border|ui-button)/.test(name))).toBe(false);
+    }
 
     act(() => buttons[0]!.click());
     act(() => buttons[1]!.click());
     expect({ jumped, closed }).toEqual({ jumped: 1, closed: 1 });
   });
 
-  it("stays inside the conversation's column on an opaque surface", () => {
+  it("stays inside the conversation's column on the header's opaque floating surface, with the canvas behind and a fade under it", () => {
     renderCard("正文");
     const surface = card()!.querySelector<HTMLElement>("[data-unread-context-surface]")!;
     const classes = surface.className.split(/\s+/);
     expect(classes).toContain("chat-column");
-    expect(classes).toContain("bg-panel");
+    for (const name of ELEVATED_FLOAT.split(" ")) expect(classes).toContain(name);
     expect(classes.some((name) => /^bg-.*\/\d/.test(name))).toBe(false);
+    expect(card()!.className.split(/\s+/)).toContain("bg-app");
+    const fade = card()!.querySelector<HTMLElement>("[data-unread-context-fade]")!;
+    expect(fade.getAttribute("aria-hidden")).toBe("true");
+    expect(fade.className).toContain("pointer-events-none");
+    expect(fade.className).toContain("top-full");
   });
 
   it("shows the first three of four citations and counts the rest", () => {

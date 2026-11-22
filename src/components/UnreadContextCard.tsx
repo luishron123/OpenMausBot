@@ -1,8 +1,13 @@
 import { X } from "lucide-react";
 import type { Message } from "@/state/store";
+import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { localizedRelativeTime } from "@/lib/relative-time";
+import { ELEVATED_FLOAT } from "./elevated";
 import { hasUnreadContextContent, unreadContextCitations, unreadContextContent, type UnreadContextAttachment } from "@/lib/unread-context";
+
+/** The transcript's quiet text action ("show more") at the label's size, shared by the card's two actions so they read as one pair on the label's line. */
+const ACTION = "inline-flex h-7 shrink-0 items-center rounded-full text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus touch:h-10";
 
 function attachmentLabel(kind: UnreadContextAttachment): string {
   if (kind === "images") return t("chat.unreadContext.images");
@@ -24,30 +29,25 @@ export function UnreadContextCard({
   if (!hasUnreadContextContent(content)) return null;
   const { shown: citations, hidden: hiddenCitations } = unreadContextCitations(content.citations);
   return (
-    <div className="w-full px-4" data-unread-context-card data-testid="unread-context-card">
-      <div data-unread-context-surface className="chat-column mb-2 rounded-xl border border-hairline/40 bg-panel px-3 py-2">
-        <div className="flex items-center gap-2">
-          <div data-unread-context-header className="flex min-w-0 flex-1 items-baseline gap-2">
-            <span className="truncate text-[12px] leading-4 font-medium text-ink-secondary">{t("chat.unreadContext.title")}</span>
-            <span className="shrink-0 text-[12px] leading-4 text-ink-tertiary">{localizedRelativeTime(message.at, activeLocale())}</span>
+    <div className="relative w-full bg-app px-4 pb-2" data-unread-context-card data-testid="unread-context-card">
+      <div data-unread-context-surface className={cn("chat-column rounded-xl px-3 pt-1.5 pb-2.5", ELEVATED_FLOAT)}>
+        <div className="flex min-h-7 items-center gap-2 text-[12px] leading-4 font-medium">
+          <div data-unread-context-header className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-ink-secondary">{t("chat.unreadContext.title")}</span>
+            <span className="shrink-0 text-ink-tertiary">{localizedRelativeTime(message.at, activeLocale())}</span>
           </div>
-          <div data-unread-context-actions className="flex shrink-0 items-center gap-1">
-            <button type="button" onClick={onJump} className="ui-button ui-button-sm touch:min-h-10">
+          {/* -me-1.5: the X's glyph, not its hover circle, ends on the card's inset. */}
+          <div data-unread-context-actions className="-me-1.5 flex shrink-0 items-center gap-0.5">
+            <button type="button" onClick={onJump} className={cn(ACTION, "px-2.5")}>
               {t("chat.citation.goToSource")}
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t("common.close")}
-              title={t("common.close")}
-              className="ui-icon-button size-6 min-h-0 p-0 touch:size-10"
-            >
+            <button type="button" onClick={onClose} aria-label={t("common.close")} title={t("common.close")} className={cn(ACTION, "w-7 justify-center touch:w-10")}>
               <X size={14} aria-hidden="true" />
             </button>
           </div>
         </div>
         {/* Each part carries its own line limit, so the card grows to fit them instead of cutting a citation in half. */}
-        <div className="mt-0.5" data-unread-context-body>
+        <div data-unread-context-body>
           {content.text && (
             <div dir="auto" data-unread-context-text className="line-clamp-2 whitespace-pre-wrap [overflow-wrap:anywhere] text-[13px] leading-[18px] text-ink">
               {content.text}
@@ -72,6 +72,8 @@ export function UnreadContextCard({
           <div className="mt-1 text-[12px] leading-4 text-ink-tertiary">{t("chat.unreadContext.moreCitations", { count: hiddenCitations })}</div>
         )}
       </div>
+      {/* The transcript melts into the canvas under the card instead of showing half a line against its edge. */}
+      <div aria-hidden="true" data-unread-context-fade className="pointer-events-none absolute inset-x-0 top-full h-4 bg-app [mask-image:linear-gradient(to_bottom,black,transparent)]" />
     </div>
   );
 }
