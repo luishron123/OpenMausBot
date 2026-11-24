@@ -63,7 +63,7 @@ async function boundedJson(response: Response, name: string): Promise<unknown> {
 
 export async function harnessMcpRequest(
   frame: unknown,
-  connection: { url: string; token: string; kind: HarnessMcpKind; toolLimit?: number },
+  connection: { url: string; token: string; kind: HarnessMcpKind; toolLimit?: number; toolChars?: number },
 ): Promise<unknown | undefined> {
   if (!frame || typeof frame !== "object" || Array.isArray(frame)) return failure(null, null, "Invalid request.", -32600);
   const message = frame as { id?: RpcId; jsonrpc?: unknown; method?: unknown; params?: unknown };
@@ -97,7 +97,7 @@ export async function harnessMcpRequest(
       throw new Error(typeof payload?.error === "string" ? payload.error.slice(0, 2_000) : `${name} server is unavailable. Start a new bot turn or try again.`);
     }
     const result = message.method === "tools/list"
-      ? capToolListResult(payload.result, connection.toolLimit, (line) => console.warn(`[${connection.kind}] ${line}`)) : payload.result;
+      ? capToolListResult(payload.result, connection.toolLimit, (line) => console.warn(`[${connection.kind}] ${line}`), connection.toolChars) : payload.result;
     return { jsonrpc: "2.0", id, result };
   } catch (error) {
     return failure(id, message.method, unansweredText(error, name, HARNESS_PROXY_TIMEOUTS_MS[connection.kind] ?? HARNESS_PROXY_TIMEOUT_MS) + RECOVERY[connection.kind]);

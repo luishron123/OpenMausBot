@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SendTurnInput } from "../contracts.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { AGENTS_ENV_HEADER } from "../routes/own-mcp-http-path.ts";
-import { TOOL_LIMIT_ENV, TOOL_LIMIT_HEADER } from "../tool-count-limit.ts";
+import { TOOL_CHARS_ENV, TOOL_CHARS_HEADER, TOOL_LIMIT_ENV, TOOL_LIMIT_HEADER, toolChars } from "../tool-count-limit.ts";
 import { TOOL_SCHEMA_PROFILE_ENV } from "../tool-schema-profile.ts";
 import { agentsToolList } from "./agents-mcp.ts";
 import { acpMcpServers, ownMcpOverHttp } from "./turn-mcp.ts";
@@ -121,5 +121,35 @@ describe("the MCP servers of a turn whose model takes a limited number of tools"
       expect(env(server)[TOOL_LIMIT_ENV]).toBeUndefined();
       expect(header(server, TOOL_LIMIT_HEADER)).toBeUndefined();
     }
+  });
+});
+
+describe("the MCP servers of a turn whose engine keeps a limited size of tool JSON", () => {
+  const env = (server: ReturnType<typeof acpMcpServers>[number]) =>
+    Object.fromEntries(("env" in server ? server.env : []).map(({ name, value }) => [name, value]));
+  const header = (server: ReturnType<typeof acpMcpServers>[number], name: string) =>
+    ("headers" in server ? server.headers : []).find((entry) => entry.name === name)?.value;
+  const agentsChars = agentsToolList(turn().integrations!.agents!.env).listed.reduce((sum, tool) => sum + toolChars(tool), 0);
+
+  it("keeps the agents server's whole list and splits what is left among the others, each over the way that server reads it", () => {
+    const servers = acpMcpServers(turn(), { http: true, toolChars: agentsChars + 3_001 });
+    expect(servers.map((server) => server.name)).toEqual(["agents", "browser", "data", "notes"]);
+    expect([header(servers[1]!, TOOL_CHARS_HEADER), header(servers[2]!, TOOL_CHARS_HEADER)]).toEqual(["1001", "1000"]);
+    expect((servers[3] as { args: string[] }).args).toEqual([SPAWNED_PROXIES.mcpGate]);
+    expect(env(servers[3]!)[TOOL_CHARS_ENV]).toBe("1000");
+    for (const server of servers) {
+      expect(env(server)[TOOL_LIMIT_ENV]).toBeUndefined();
+      expect(header(server, TOOL_LIMIT_HEADER)).toBeUndefined();
+    }
+  });
+
+  it("leaves the others nothing when the agents list alone fills it", () => {
+    const servers = acpMcpServers(turn(), { toolChars: 10 });
+    expect(servers.map((server) => env(server)[TOOL_CHARS_ENV])).toEqual(["10", "0", "0", "0"]);
+  });
+
+  it("carries a count limit beside it", () => {
+    const servers = acpMcpServers(turn(), { toolChars: agentsChars + 3_000, toolBudget: 1_000 });
+    expect(env(servers[3]!)).toMatchObject({ [TOOL_CHARS_ENV]: "1000", [TOOL_LIMIT_ENV]: expect.any(String) });
   });
 });

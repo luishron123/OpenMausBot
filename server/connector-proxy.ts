@@ -19,7 +19,7 @@ import { withSignedOutHint } from "./connector-signed-out-hint.ts";
 import { AUTH_CONFIG_ID } from "../shared/connector-availability.ts";
 import { fitToolListResult } from "./mcp-tool-schema.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
-import { capToolListResult, toolLimitFromEnv } from "./tool-count-limit.ts";
+import { capToolListResult, toolCharsFromEnv, toolLimitFromEnv } from "./tool-count-limit.ts";
 
 type Json = Record<string, unknown>;
 
@@ -32,6 +32,7 @@ const ALLOWED_TOOLS = parseConnectorAllowedToolsEnv(process.env[CONNECTOR_ALLOWE
 const SERVICE_SLUGS = parseConnectorServiceSlugsEnv(process.env[CONNECTOR_SERVICE_SLUGS_ENV]);
 const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
 const TOOL_LIMIT = toolLimitFromEnv(process.env);
+const TOOL_CHARS = toolCharsFromEnv(process.env);
 const APP_TOOLS = parseAppToolsEnv(process.env[APP_TOOLS_ENV]);
 const APP_TOOL_NAMES = process.env[APP_TOOL_NAMES_ENV] === "dotted" ? "dotted" : "plain";
 const MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
@@ -266,9 +267,9 @@ function withArgumentNotes(name: string, response: Json, changed: readonly strin
 }
 
 function fittedList(frame: Json): Json {
-  if ((!SCHEMA_PROFILE && TOOL_LIMIT === undefined) || !("result" in frame)) return frame;
+  if ((!SCHEMA_PROFILE && TOOL_LIMIT === undefined && TOOL_CHARS === undefined) || !("result" in frame)) return frame;
   const log = (line: string) => process.stderr.write(`connector-proxy: ${line}\n`);
-  return { ...frame, result: capToolListResult(fitToolListResult(frame.result, SCHEMA_PROFILE, log), TOOL_LIMIT, log) };
+  return { ...frame, result: capToolListResult(fitToolListResult(frame.result, SCHEMA_PROFILE, log), TOOL_LIMIT, log, TOOL_CHARS) };
 }
 
 /** A refusal that answers the same way every time: an HTTP 4xx other than 429, or a result that is not a list (the

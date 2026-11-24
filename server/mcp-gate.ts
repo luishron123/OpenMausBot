@@ -15,7 +15,7 @@ import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured 
 import { descendantsOf, signalTree, stopTree, type TreeProcess } from "./proc-descendants.ts";
 import { killCliTree } from "./procs.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
-import { capToolListResult, toolLimitFromEnv } from "./tool-count-limit.ts";
+import { capToolListResult, toolCharsFromEnv, toolLimitFromEnv } from "./tool-count-limit.ts";
 
 type Json = Record<string, unknown>;
 
@@ -47,6 +47,7 @@ const SPILL_HINT = gateEnv.OMB_GATE_SPILL_HINT === "1";
 const DIRECTORY = gateEnv.OMB_GATE_DIRECTORY === "1";
 const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
 const TOOL_LIMIT = toolLimitFromEnv(process.env);
+const TOOL_CHARS = toolCharsFromEnv(process.env);
 
 function fail(message: string): never {
   process.stderr.write(`mcp-gate(${NAME}): ${message}\n`);
@@ -407,8 +408,8 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     if (result.nextCursor === undefined) tools.push(QUERY_TOOL);
     result.tools = tools;
   }
-  if (TOOL_LIMIT !== undefined && request?.kind === "list" && message.error === undefined && isRecord(result)) {
-    message.result = capToolListResult(result, TOOL_LIMIT, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`));
+  if ((TOOL_LIMIT !== undefined || TOOL_CHARS !== undefined) && request?.kind === "list" && message.error === undefined && isRecord(result)) {
+    message.result = capToolListResult(result, TOOL_LIMIT, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`), TOOL_CHARS);
   }
   if (request?.kind === "call" && observer && message.error === undefined) observer.returned(request.params, result);
   if (request?.kind === "call" && request.trim && isRecord(result)) {

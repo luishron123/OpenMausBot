@@ -8,7 +8,7 @@ import { AGENTS_ENV_HEADER, OWN_MCP_HTTP_PATH } from "../routes/own-mcp-http-pat
 import { TOOL_SCHEMA_PROFILE_ENV, toolSchemaProfileFor, type ToolSchemaProfileId } from "../tool-schema-profile.ts";
 import { AGENTS_MCP_ENV } from "./agents-mcp-env.ts";
 import { OWN_APPS_SERVER } from "../../shared/own-apps.ts";
-import { shareToolBudget, TOOL_LIMIT_ENV, TOOL_LIMIT_HEADER } from "../tool-count-limit.ts";
+import { shareToolBudget, TOOL_CHARS_ENV, TOOL_CHARS_HEADER, TOOL_LIMIT_ENV, TOOL_LIMIT_HEADER, toolChars } from "../tool-count-limit.ts";
 import { agentsToolList } from "./agents-mcp.ts";
 
 export interface TurnStdioMcpServer {
@@ -21,8 +21,8 @@ export interface TurnStdioMcpServer {
 /** URL servers always go through OpenMausBot's remote proxy: agents' own MCP clients add capability
  * fields strict servers refuse. Under a schema profile OpenMausBot fits every tool list: its own proxies and gates read
  * the profile, and the person's stdio servers go through a gate. */
-export function turnStdioMcpServers(turn: SendTurnInput, options: { schemaProfile?: ToolSchemaProfileId; toolBudget?: number } = {}): TurnStdioMcpServer[] {
-  const { schemaProfile, toolBudget } = options;
+export function turnStdioMcpServers(turn: SendTurnInput, options: { schemaProfile?: ToolSchemaProfileId; toolBudget?: number; toolChars?: number } = {}): TurnStdioMcpServer[] {
+  const { schemaProfile, toolBudget, toolChars: charBudget } = options;
   const servers: TurnStdioMcpServer[] = [];
   const observedCommands = new Map<string, AppMount>();
   const add = (name: string, server: { command: string; args: string[]; env?: Record<string, string> } | undefined) => {
@@ -58,20 +58,26 @@ export function turnStdioMcpServers(turn: SendTurnInput, options: { schemaProfil
     if (!gated) throw new Error("Tool selection requires an MCP gate.");
     return profiled({ name: server.name, command: gated.command, args: gated.args, env: gated.env });
   });
-  return toolBudget === undefined ? fitted : withToolShares(fitted, turn, toolBudget);
+  return toolBudget === undefined && charBudget === undefined ? fitted : withToolShares(fitted, turn, { count: toolBudget, chars: charBudget });
 }
 
 /** OpenMausBot's proxies and gates that cap their list at OMB_TOOL_LIMIT. */
 const LIMITING_PROXY = /(?:^|[\\/])(?:agents-proxy|harness-mcp-proxy|connector-proxy|mcp-gate|mcp-remote-proxy)\.[jt]s$/;
 
-/** Each server's share of `budget` tools in its environment, the agents server's whole list first; a server that would
- * not read its share goes behind a gate that does. */
-function withToolShares(servers: TurnStdioMcpServer[], turn: SendTurnInput, budget: number): TurnStdioMcpServer[] {
+/** Each server's share of `budget.count` tools and `budget.chars` characters of tool JSON in its environment, the agents
+ * server's whole list first; a server that would not read its share goes behind a gate that does. */
+function withToolShares(servers: TurnStdioMcpServer[], turn: SendTurnInput, budget: { count?: number; chars?: number }): TurnStdioMcpServer[] {
   const agents = turn.integrations?.agents;
-  const shares = shareToolBudget(servers.map((server) => server.name === "agents" && agents
-    ? { name: server.name, tools: agentsToolList(agents.env).listed.length } : { name: server.name }), budget);
+  const listed = agents ? agentsToolList(agents.env).listed : undefined;
+  const shares = (size: (tools: readonly unknown[]) => number, total: number) => shareToolBudget(servers.map((server) =>
+    server.name === "agents" && listed ? { name: server.name, tools: size(listed) } : { name: server.name }), total);
+  const counts = budget.count === undefined ? undefined : shares((tools) => tools.length, budget.count);
+  const chars = budget.chars === undefined ? undefined : shares((tools) => tools.reduce<number>((sum, tool) => sum + toolChars(tool), 0), budget.chars);
   return servers.map((server) => {
-    const share = { [TOOL_LIMIT_ENV]: String(shares.get(server.name) ?? 0) };
+    const share = {
+      ...(counts ? { [TOOL_LIMIT_ENV]: String(counts.get(server.name) ?? 0) } : {}),
+      ...(chars ? { [TOOL_CHARS_ENV]: String(chars.get(server.name) ?? 0) } : {}),
+    };
     if (server.args.some((arg) => LIMITING_PROXY.test(arg))) return { ...server, env: { ...server.env, ...share } };
     const gated = gateServer({ name: server.name, server: { command: server.command, args: server.args, env: server.env },
       threadId: turn.threadId, budget: 0, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, limitsTools: true });
@@ -102,18 +108,19 @@ export function ownMcpOverHttp(server: TurnStdioMcpServer): { url: string; heade
   }
   const kind = HARNESS_KINDS.find((candidate) => candidate === server.args[script + 1]);
   const token = kind && server.env[harnessMcpTokenEnv(kind)];
-  const limit = server.env[TOOL_LIMIT_ENV];
+  const limit = server.env[TOOL_LIMIT_ENV], chars = server.env[TOOL_CHARS_ENV];
   return kind && token ? { url: `${harness}${OWN_MCP_HTTP_PATH}${kind}`,
-    headers: { authorization: `Bearer ${token}`, ...(limit === undefined ? {} : { [TOOL_LIMIT_HEADER]: limit }) } } : null;
+    headers: { authorization: `Bearer ${token}`, ...(limit === undefined ? {} : { [TOOL_LIMIT_HEADER]: limit }),
+      ...(chars === undefined ? {} : { [TOOL_CHARS_HEADER]: chars }) } } : null;
 }
 
 /** The turn's MCP servers as ACP session/new takes them. stdio is the baseline every ACP agent supports; an agent that
  * reaches servers by URL (`http`) gets OpenMausBot's own as endpoints of this server instead of a proxy process each.
  * `engine` is the driver kind, whose provider may limit each tool's schema; `toolBudget`, how many MCP tools the model's
- * provider takes in all. */
-export function acpMcpServers(turn: SendTurnInput, options: { http?: boolean; engine?: string; toolBudget?: number } = {}): AcpMcpServer[] {
+ * provider takes in all; `toolChars`, how many characters of tool JSON the engine keeps before it drops tools. */
+export function acpMcpServers(turn: SendTurnInput, options: { http?: boolean; engine?: string; toolBudget?: number; toolChars?: number } = {}): AcpMcpServer[] {
   const schemaProfile = toolSchemaProfileFor({ engine: options.engine })?.id;
-  const servers: AcpMcpServer[] = turnStdioMcpServers(turn, { schemaProfile, toolBudget: options.toolBudget }).map((server) => ({ ...server, env: pairs(server.env) }));
+  const servers: AcpMcpServer[] = turnStdioMcpServers(turn, { schemaProfile, toolBudget: options.toolBudget, toolChars: options.toolChars }).map((server) => ({ ...server, env: pairs(server.env) }));
   return options.http ? acpOwnServersOverHttp(servers) : servers;
 }
 

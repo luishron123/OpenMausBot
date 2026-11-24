@@ -17,6 +17,7 @@ import {
   FIND_TOOL,
   TOOL_BRIDGE_ENV,
   USE_TOOL,
+  acpBridgeCallRequest,
   bridgedCallTarget,
   bridgedCallTitle,
   createToolBridge,
@@ -528,5 +529,17 @@ describe("seeing through a bridged call", () => {
     expect(unbridgedServer(off)).toBe(off);
     expect(unbridgedServer(other)).toBe(other);
     expect(unbridgedServer(bare)).toBe(bare);
+  });
+});
+
+describe("an ACP permission request for the bridge", () => {
+  it("is the agents use_tool in every engine's spelling", () => {
+    for (const toolCall of [{ name: "mcp_agents_use_tool", title: "Run mcp_agents_use_tool" }, { title: "mcp__agents__use_tool" }, { title: "agents__use_tool" },
+      { title: "agents_use_tool" }, { title: "use_tool" }]) expect(acpBridgeCallRequest(toolCall), JSON.stringify(toolCall)).toBe(true);
+  });
+
+  it("is no other tool, and nothing at all for a request without a name", () => {
+    for (const toolCall of [{ name: "mcp_agents_find_tool", title: "Run mcp_agents_find_tool" }, { title: "mcp_agents_use_tool_extra" }, { title: "Run mcp_waha_use_tool" },
+      { title: "echo use_tool" }, {}, null, undefined]) expect(acpBridgeCallRequest(toolCall), JSON.stringify(toolCall)).toBe(false);
   });
 });

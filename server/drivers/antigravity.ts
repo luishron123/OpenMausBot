@@ -172,6 +172,11 @@ function nativeDiscoveryError(instanceId: string, error: unknown): unknown {
   return error instanceof Error && /timed out/iu.test(error.message) ? new AcpDiscoveryTimeoutError(error.message) : error;
 }
 
+/** Antigravity CLI 1.5.15 keeps about 63,000 characters of MCP tool JSON across every server and drops the largest tools
+ * past that, whatever `antigravity/alwaysLoad` or `eager` says, leaving no way to load them. Each server lists its share
+ * of this, the agents server's whole list first, so what the CLI drops is a user server's last tools instead. */
+export const ANTIGRAVITY_MCP_TOOL_CHARS = 55_000;
+
 const support: AcpSupport = {
   driverKind: "antigravityAgent",
   // Named for what people look for: Google moved personal Gemini subscriptions (free, AI Pro, AI Ultra) from Gemini CLI to Antigravity on 2026-06-18.
@@ -213,6 +218,7 @@ const support: AcpSupport = {
   clientReadRoots: (turn) => (turn.skillFiles ?? []).map(dirname),
   sanitizeToolPayload: true,
   updateFilter: antigravityUpdateFilter,
+  mcpToolChars: ANTIGRAVITY_MCP_TOOL_CHARS,
 
   resolveCommand: async (env, config, instanceId) => {
     const runtime = await resolveAntigravityRuntime(config.cli, env);

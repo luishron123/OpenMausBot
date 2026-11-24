@@ -1999,6 +1999,28 @@ describe("ACP turns (fake CLI)", () => {
     expect(readFileSync(answer, "utf8")).toBe("allow-always");
   });
 
+  it("answers an agents use_tool request for that one call only, never with allow_always or a session memory", async () => {
+    process.env.FAKE_ACP_ALLOW_ALWAYS = "1";
+    process.env.FAKE_ACP_PERMISSION_TOOL_CALL = JSON.stringify({ kind: "other", name: "mcp_agents_use_tool", title: "Run mcp_agents_use_tool",
+      rawInput: { name: "show_html", arguments: { html: "<p>Hi</p>" } } });
+    const answer = join(scratch, "bridge-permission-answer.txt");
+    process.env.FAKE_ACP_PERMISSION_ANSWER = answer;
+    await create(GrokAgentDriver, "permission");
+    const threadId = "t-bridge-always";
+    await instance.adapter.sendTurn({ threadId, text: "go", approvalMode: "ask" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    expect(opened).not.toHaveProperty("allowSession", true);
+    await instance.adapter.respondToRequest(threadId, opened.requestId!, { behavior: "allow", always: true });
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(readFileSync(answer, "utf8")).toBe("allow-once");
+
+    const second = await instance.adapter.sendTurn({ threadId, text: "again", approvalMode: "ask", resumeCursor: "fake-acp-session" });
+    const asked = await recorder.until((e) => e.type === "request.opened" && e.turnId === second.turnId);
+    await instance.adapter.respondToRequest(threadId, asked.requestId!, { behavior: "deny" });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === second.turnId);
+    expect(recorder.events.filter((e) => e.type === "request.opened")).toHaveLength(2);
+  });
+
   it("remembers the exact operation for the session when the agent offers no allow_always", async () => {
     // Grok 4.6 often omits allow_always.
     const answer = join(scratch, "permission-answer-once.txt");

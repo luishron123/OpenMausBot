@@ -37,6 +37,10 @@ export function agentsToolBridgeEnabled(cfg: BridgeConfig, env: NodeJS.ProcessEn
   return cfg.features?.agentsToolBridge === true;
 }
 
+/** Antigravity drops the largest MCP tools past a size it keeps (ANTIGRAVITY_MCP_TOOL_CHARS) and offers no loader, so the
+ * whole agents list never reaches the model: its turns are bridged unless OMB_AGENTS_TOOL_BRIDGE=0. */
+const ANTIGRAVITY_DRIVER = "antigravityAgent";
+
 /** A model on this machine or network reads the whole list on every turn, out of a small window and at laptop speed:
  * about 15,000 tokens before the person has said anything. OMB_AGENTS_TOOL_BRIDGE=0 still wins. */
 function runsLocalModel(bot: { modelSelection?: { model?: unknown } } | null | undefined, engine: BridgeEngine | null | undefined): boolean {
@@ -257,6 +261,9 @@ function claudeRefusal(cfg: BridgeConfig, engine: BridgeEngine, env: NodeJS.Proc
  *               block a call by the name it sees.
  *   ACP agents  keep their own permissions: one "always allow" for use_tool would cover every hidden
  *               tool, hidden reads would lose their read-only marks, and Grok has a native use_tool.
+ *               Antigravity is the exception: it asks before every MCP call, reads no tool's read-only
+ *               mark, and the driver answers a use_tool request for that one call only
+ *               (acpBridgeCallRequest), never with "always allow".
  *   the rest    have not been shown to qualify. */
 export function engineBridgeRefusal(
   cfg: BridgeConfig,
@@ -268,6 +275,7 @@ export function engineBridgeRefusal(
   const { driverKind } = engine;
   if (driverKind === "claudeAgent") return claudeRefusal(cfg, engine, env, host);
   if (CHAT_RUNTIME_DRIVERS.has(driverKind)) return null;
+  if (driverKind === ANTIGRAVITY_DRIVER) return null;
   if (driverKind === "codex") return "Codex reads its own layered configuration and hooks, which this version does not examine";
   if (driverKind === "piAgent") return "Pi loads the person's own extensions, which can block a tool by its name, and this version does not examine them";
   return "this engine keeps its own tool permissions";
@@ -296,7 +304,8 @@ export function agentsToolBridgeRefusal(
 ): string | null {
   try {
     const localModel = runsLocalModel(bot, engine);
-    if (!agentsToolBridgeEnabled(cfg, env) && (env[TOOL_BRIDGE_ENV] === "0" || !localModel)) return "the switch is off";
+    const bridgedByDefault = localModel || engine?.driverKind === ANTIGRAVITY_DRIVER;
+    if (!agentsToolBridgeEnabled(cfg, env) && (env[TOOL_BRIDGE_ENV] === "0" || !bridgedByDefault)) return "the switch is off";
     if (!localModel && claudeDefersAgentsTools(engine, env, host)) return "Claude Code defers the agents tools on this turn";
     // Security: selection gates match the name in the call, so any selection, even one that permits
     // everything or cannot be read, means no bridge.
