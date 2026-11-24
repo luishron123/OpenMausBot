@@ -14,6 +14,18 @@ function peakOf(samples: Float32Array, from = 0, to = samples.length) {
   return peak;
 }
 
+/** Loudness as heard: the root mean square over the loudest 50 ms, a sound shorter than that counted as silent for the rest. */
+function loudnessOf(samples: Float32Array, rate = 48_000) {
+  const span = Math.round(0.05 * rate);
+  let loudest = 0;
+  for (let start = 0; start < samples.length; start += Math.round(rate / 200)) {
+    let energy = 0;
+    for (let i = start; i < Math.min(samples.length, start + span); i++) energy += samples[i] * samples[i];
+    loudest = Math.max(loudest, Math.sqrt(energy / span));
+  }
+  return loudest;
+}
+
 describe("app sounds rendered offline", () => {
   it.each(cases)("%s in %s is finite, short, quiet and silent at both ends", (cue, style) => {
     for (const rate of RATES) {
@@ -66,6 +78,13 @@ describe("app sounds rendered offline", () => {
     expect(reply).toBeLessThan(preview);
     expect(renderSound("done", style, 48_000)).toEqual(renderSound("reply", style, 48_000));
     expect(renderSound("stop", style, 48_000).length / 48_000).toBeLessThan(0.04);
+  });
+
+  it.each(NEW_STYLES)("keeps the %s send quieter than the stop by loudness over 50 ms, not only by peak", (style) => {
+    const [send, stop, reply, preview] = (["send", "stop", "reply", "preview"] as const).map((cue) => loudnessOf(renderSound(cue, style, 48_000)));
+    expect(dB(stop / send)).toBeGreaterThanOrEqual(1);
+    expect(stop).toBeLessThan(reply);
+    expect(reply).toBeLessThan(preview);
   });
 
   it("makes the tap send one dry strike, well under the preview", () => {

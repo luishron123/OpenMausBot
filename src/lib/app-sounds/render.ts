@@ -127,10 +127,12 @@ const tapLow: Voice = { ...TAP, partials: [[1, 1], [3.93, 0.05, 0.01]], decay: 0
 
 const BREEZE = VOICES.breeze;
 const breezeDry: Voice = { ...BREEZE, attack: 0.002, decay: 0.012, release: 0.006, tail: 0, room: undefined, edge: 0.0016 };
+const breezeSend: Voice = { ...BREEZE, decay: 0.014, release: 0.02, tail: 0.1, room: { delays: [0.0187, 0.0259, 0.0341], feedback: 0.38, mix: 0.26 } };
 const breezeLow: Voice = { ...BREEZE, decay: 0.06, release: 0.03, tail: 0.06, room: { delays: [0.0187, 0.0259], feedback: 0.3, mix: 0.2 } };
 
 const CHIP = VOICES.chip;
 const chipShort: Voice = { ...CHIP, decay: 0.03, release: 0.006, tail: 0 };
+const chipSend: Voice = { ...CHIP, decay: 0.012, release: 0.005, tail: 0 };
 const chipLow: Voice = { ...CHIP, decay: 0.03, release: 0.008, tail: 0, levels: 4, soften: 1600 };
 
 /** The styles with phrases of their own; each event keeps its role and its place among the others in loudness. */
@@ -149,7 +151,7 @@ const STYLE_PHRASES: Partial<Record<SoundStyle, Record<SoundCue, StylePhrase>>> 
     discard: { tones: [tone(277, 0, 0.02)], level: 0.36, limit: 0.07, voice: tapLow },
   },
   breeze: {
-    send: { tones: [tone(1245, 0, 0.025, { glide: { from: 0.95, settle: 0.012 } })], level: 0.5, limit: 0.34, voice: BREEZE },
+    send: { tones: [tone(1245, 0, 0.025, { glide: { from: 0.95, settle: 0.012 } })], level: 0.41, limit: 0.16, voice: breezeSend },
     stop: thud(205, BREEZE, 0.54),
     reply: { tones: [tone(932, 0, 0.05), tone(1109, 0.09, 0.1)], level: 0.7, limit: 0.65, voice: BREEZE },
     done: { tones: [tone(932, 0, 0.05), tone(1109, 0.09, 0.1)], level: 0.7, limit: 0.65, voice: BREEZE },
@@ -162,7 +164,7 @@ const STYLE_PHRASES: Partial<Record<SoundStyle, Record<SoundCue, StylePhrase>>> 
     discard: { tones: [tone(554, 0, 0.02)], level: 0.34, limit: 0.06, voice: breezeDry },
   },
   chip: {
-    send: { tones: [tone(988, 0, 0.03), tone(1319, 0.045, 0.035)], level: 0.5, limit: 0.11, voice: chipShort },
+    send: { tones: [tone(988, 0, 0.022), tone(1319, 0.045, 0.026)], level: 0.5, limit: 0.08, voice: chipSend },
     stop: thud(131, CHIP, 0.55),
     reply: {
       tones: [tone(659, 0, 0.045), tone(988, 0.06, 0.05), tone(988, 0.13, 0.025, { gain: 0.45 }), tone(988, 0.175, 0.02, { gain: 0.2 })],
