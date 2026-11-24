@@ -154,7 +154,7 @@ describe("sound style preference", () => {
     const preference = await import("./notification-preferences");
     expect(preference.parseSoundChoice("0")).toBe("off");
     for (const value of ["1", null, undefined, "", "broken"]) expect(preference.parseSoundChoice(value)).toBe("click");
-    for (const style of ["click", "glass", "retro"] as const) expect(preference.parseSoundChoice(style)).toBe(style);
+    for (const style of ["click", "glass", "retro", "tap", "breeze", "chip"] as const) expect(preference.parseSoundChoice(style)).toBe(style);
     local.setItem(preference.NOTIFICATION_SOUNDS_KEY, "0");
     expect(preference.readSoundChoice()).toBe("off");
     expect(preference.useSoundChoice()).toBe("off");
