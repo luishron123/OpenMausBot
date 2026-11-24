@@ -116,6 +116,14 @@
 //   FAKE_ACP_MODE=grok-steer  Grok's second `session/prompt` with `[ui] follow_up_behavior = "steer"` in GROK_HOME/config.toml: a prompt
 //     during a running one is injected into it and answers {stopReason:"cancelled", _meta:{completionKind:"removedFromQueue"}}
 //     at once; the running prompt then ends with end_turn and every steer it took.
+//   FAKE_ACP_MODE=antigravity-steer  Antigravity's native CLI: a prompt during a running one is taken into it, the running
+//     prompt answers {stopReason:"end_turn"} at once with no usage, and the new one carries the turn and ends it with the usage,
+//     or with {stopReason:"cancelled"} and the usage on session/cancel. FAKE_ACP_STEER_FAIL=asking: the CLI waits on a
+//     permission the app has not shown, so it rejects the prompt (-32603 "Can't add this prompt") and the turn runs on.
+//     FAKE_ACP_STEER_FAIL=asking-late: the same rejection, held until FAKE_ACP_STEER_FAIL_GATE exists.
+//     FAKE_ACP_STEER_FAIL=lost: the prompt is taken into the running one, but its answer is an error other than that
+//     rejection, as when the link drops before the CLI confirms it. FAKE_ACP_STEER_TOOL: the running prompt shows a tool
+//     call with this title that runs until the turn ends.
 //   FAKE_ACP_STEERING=off  the two steer modes above report no steering capability.
 //   FAKE_ACP_MODE=grok-complete  grok 1.0.41's `_x.ai/session/prompt_complete`: a prompt says "answered", then sends the
 //     notification {sessionId, promptId: the prompt's _meta.promptId, stopReason: FAKE_ACP_COMPLETE_STOP (end_turn),
@@ -898,6 +906,35 @@ function gatedPrompt(msg: any) {
     result(msg.id, { stopReason: "cancelled", _meta: { completionKind: "removedFromQueue" } });
     return;
   }
+  if (gatedTurn && mode === "antigravity-steer" && process.env.FAKE_ACP_STEER_FAIL === "asking-late") {
+    recordMethod("session/prompt.held");
+    const gate = process.env.FAKE_ACP_STEER_FAIL_GATE!;
+    const poll = setInterval(() => {
+      if (!existsSync(gate)) return;
+      clearInterval(poll);
+      recordMethod("session/prompt.rejected");
+      out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: `Can't add this prompt to session ${msg.params?.sessionId}` } });
+    }, 50);
+    return;
+  }
+  if (gatedTurn && mode === "antigravity-steer" && process.env.FAKE_ACP_STEER_FAIL === "asking") {
+    recordMethod("session/prompt.rejected");
+    out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: `Can't add this prompt to session ${msg.params?.sessionId}: the running prompt is waiting for a permission or question answer; answer it or send session/cancel, then send this prompt again` } });
+    return;
+  }
+  if (gatedTurn && mode === "antigravity-steer" && process.env.FAKE_ACP_STEER_FAIL === "lost") {
+    recordMethod("session/prompt.steer");
+    gatedTurn.steers.push(text);
+    out({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "connection lost before the prompt was confirmed" } });
+    return;
+  }
+  if (gatedTurn && mode === "antigravity-steer") {
+    recordMethod("session/prompt.steer");
+    gatedTurn.steers.push(text);
+    for (const id of gatedTurn.pending) result(id, { stopReason: "end_turn" });
+    gatedTurn.pending = [msg.id];
+    return;
+  }
   if (gatedTurn && mode === "devin-steer") {
     recordMethod("session/prompt.steer");
     gatedTurn.steers.push(text);
@@ -909,7 +946,12 @@ function gatedPrompt(msg: any) {
   const say = (line: string) => out({ jsonrpc: "2.0", method: "session/update",
     params: { sessionId: msg.params.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: line } } } });
   say("working. ");
+  const tool = process.env.FAKE_ACP_STEER_TOOL;
+  const toolUpdate = (update: Record<string, unknown>) => out({ jsonrpc: "2.0", method: "session/update",
+    params: { sessionId: msg.params.sessionId, update: { toolCallId: `${turn.run}-tool`, ...update } } });
+  if (tool) toolUpdate({ sessionUpdate: "tool_call", title: tool, kind: "execute", status: "in_progress", rawInput: { command: tool } });
   const finish = () => {
+    if (tool && gatedTurn === turn) toolUpdate({ sessionUpdate: "tool_call_update", status: "completed" });
     gatedTurn = null;
     say(`done${turn.steers.length ? `; steered: ${turn.steers.join(" | ")}` : ""}`);
     for (const id of turn.pending) {
@@ -1376,7 +1418,7 @@ function handle(msg: any) {
         hermesPrompt(msg);
         return;
       }
-      if (mode === "opencode-steer" || mode === "devin-steer" || mode === "grok-steer") {
+      if (mode === "opencode-steer" || mode === "devin-steer" || mode === "grok-steer" || mode === "antigravity-steer") {
         gatedPrompt(msg);
         return;
       }
@@ -1986,7 +2028,9 @@ function handle(msg: any) {
       break;
     case "session/cancel":
       if (gatedTurn) {
-        for (const id of gatedTurn.pending) result(id, { stopReason: "cancelled", _meta: {} });
+        // Antigravity's CLI reports the stopped turn's usage on the cancelled reply.
+        const usage = mode === "antigravity-steer" ? { usage: { inputTokens: 10, outputTokens: 5 } } : {};
+        for (const id of gatedTurn.pending) result(id, { stopReason: "cancelled", ...usage, _meta: {} });
         gatedTurn = null;
       }
       if (streamingPromptId !== null) {

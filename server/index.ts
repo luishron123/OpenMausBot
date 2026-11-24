@@ -206,7 +206,7 @@ import {
   type RequestOutcome,
   type RuntimeEvent,
   type SendTurnInput,
-  type SteerOutcome,
+  type SteerLate, type SteerOutcome,
   newId,
 } from "./contracts.ts";
 import { RETRY_MAX_ATTEMPTS } from "./drivers/retry.ts";
@@ -6985,7 +6985,7 @@ const canSteerThread = (threadId: string) => {
   return admit("direct-busy", { pendingComputerSelection: Boolean(computerSelectionTurns.get(threadId)?.selected),
     engineCanSteer: Boolean(engine?.capabilities.queueing && engine.steer) }).action === "steer";
 };
-const steerThread = async (threadId: string, text: string) => (await loopingEngine(threadId)?.steer?.(threadId, text)) ?? "refused";
+const steerThread = async (threadId: string, text: string, late?: SteerLate) => (await loopingEngine(threadId)?.steer?.(threadId, text, undefined, late)) ?? "refused";
 const repeats = createUnattendedTurns({
   settings: (unattended) => loopGuardSettings(cfg, process.env, unattended), unattended: (threadId) => !personDriven(directRequestOwners.get(threadId)) && (isUnattended(store.botByThread(threadId)?.id, threadId) || activeRoutineRunForThread(threadId) !== null),
   append: (threadId, tool) => void store.appendMessage(threadId, { role: "bot", kind: "activity", tool }),
@@ -7162,7 +7162,7 @@ async function acceptDirectSend(
       if (currentAtStart.busy) {
         const personsOwn = personPresent && !app && (trigger.kind === "user" || trigger.kind === "owner"), queuedPrompt = (app?.context ?? "") + personPrompt(threadId, sender, promptWithReply(promptWithDataContext(text, dataContext), replyTo, userNameFor(threadId))); if (runOwners.arrival(threadId, sender, personPresent && Boolean(sender?.id)) === "queue") return { ok: true as const, queued: true as const, threadId, queueId: queueSteeredMessage(currentAtStart.id, threadId, text, { replyToId: replyTo?.id, sendId, dataContext, fromApp: app?.fromApp, mentions, prompt: queuedPrompt, sender, trigger, via, callId, first: personPresent && Boolean(sender?.id) }).id };
         const instance = runningTurnInstance(currentAtStart, threadId);
-        let steered: SteerOutcome = "refused";
+        let steered: SteerOutcome = "refused", refusedEarly = false, refusedLate = (): void => { refusedEarly = true; };
         const steerInput = extractTurnImages(text);
         const carriesVideos = steerInput.videos.length > 0, carriesImages = steerInput.images.length > 0 || carriesVideos;
         const steerTarget = handoffs.current(threadId);
@@ -7177,9 +7177,7 @@ async function acceptDirectSend(
         const chose = busyAdmission.action === "queue" ? busyAdmission.chose : undefined;
         if (busyAdmission.action === "steer" && instance?.adapter.steer) {
           const prompt = (app?.context ?? "") + personPrompt(threadId, sender, promptWithReply(promptWithDataContext(steerInput.text, dataContext), replyTo, userNameFor(threadId)));
-          steered = await (steerInput.images.length > 0
-            ? instance.adapter.steer(threadId, prompt, steerInput.images)
-            : instance.adapter.steer(threadId, prompt))
+          steered = await instance.adapter.steer(threadId, prompt, steerInput.images.length > 0 ? steerInput.images : undefined, { refused: () => refusedLate() })
             .catch((): SteerOutcome => "indeterminate");
         }
         // steer() awaits the adapter: re-check ownership before appending, or a late acknowledgement writes into a task the bot no longer owns.
@@ -7188,7 +7186,7 @@ async function acceptDirectSend(
         if (!store.taskByThread(botId, threadId)) {
           throw Object.assign(new Error("the target task no longer exists"), { status: 409 });
         }
-        const delivered = steered !== "refused";
+        const delivered = steered !== "refused" && !refusedEarly;
         if (delivered) {
           if (steered === "steered" && !current.busy) {
             throw Object.assign(
@@ -7212,7 +7210,11 @@ async function acceptDirectSend(
           store.setTaskAskedAt(botId, threadId, message.at);
           handoffs.steered(threadId, steerTarget, instance?.instanceId, message.id);
           signInSettle.answerInChat(botId, threadId);
-          if (personsOwn) personFirst.wait(threadId, { requeue: (note) => void queueSteeredMessage(current.id, threadId, text, { prompt: note ? `${queuedPrompt}\n\n${note}` : queuedPrompt, rowId: message.id, first: true, queuedAt: message.at, replyToId: replyTo?.id, dataContext, sender, trigger, via, callId, mentions, aheadOfOthers: runOwners.askerFirst(threadId) }) });
+          let requeued = false; const requeue = (note?: string) => { if (!requeued) void queueSteeredMessage(current.id, threadId, text, { prompt: note ? `${queuedPrompt}\n\n${note}` : queuedPrompt, rowId: message.id, first: true, queuedAt: message.at, replyToId: replyTo?.id, dataContext, sender, trigger, via, callId, mentions, aheadOfOthers: runOwners.askerFirst(threadId) }); requeued = true; };
+          refusedLate = () => { store.patchMessage(threadId, message.id, { steered: undefined }); try { requeue(); } catch (error) { console.warn("steer: could not queue a steer the agent turned down", error); store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedNoticeTool("chat.notice.unreadMessage") }); } };
+          // An unconfirmed steer may already be in the turn: person-first would stop that turn and run the words a second time.
+          if (steered === "indeterminate") store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedNoticeTool("chat.notice.steerUnconfirmed") });
+          else if (personsOwn) personFirst.wait(threadId, { requeue });
           return { ok: true as const, steered: true as const, threadId, message };
         }
         if (!current.busy) {
