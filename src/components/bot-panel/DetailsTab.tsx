@@ -8,8 +8,8 @@ import { EffortRow, ModelPicker } from "../ModelPicker";
 import type { SidebarMenuItem } from "../SidebarPopoverMenu";
 import type { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
 import { BotConversations } from "./Conversations";
+import { BotKeeps } from "./Keeps";
 import type { SimplePageId } from "./page-registry";
-import { TryAsking } from "./TryAsking";
 import { Card, CardLabel, LabelAction, panelActionCls, NavRow, RowIcon, rowCls, RowText } from "./rows";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
 import { newChatBot } from "@/state/new-chat";
@@ -90,9 +90,9 @@ export function DetailsTab({ bot, derived, onOpen }: {
         />
       </section>
 
-      <BotConversations bot={bot} />
+      <BotKeeps bot={bot} onOpen={onOpen} />
 
-      <TryAsking bot={bot} />
+      <BotConversations bot={bot} />
 
       {conversationItems.length > 0 && (
         <section data-panel-card="conversation">
