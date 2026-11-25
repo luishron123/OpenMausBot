@@ -852,6 +852,7 @@
   "sidebar.teamImportedMany": "{count} ботів додано · наявні боти й чати збережено",
   "sidebar.connectionsToFinish": "Підключення, які треба завершити в «Застосунки → MCP servers»: {count}",
   "sidebar.nav.teamMap": "Мапа команди",
+  "sidebar.nav.panels": "Панелі",
   "sidebar.nav.automations": "Автоматизації",
   "sidebar.nav.connectedApps": "Підключені застосунки",
   "sidebar.tools": "Інструменти",

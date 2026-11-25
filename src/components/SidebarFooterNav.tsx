@@ -1,4 +1,4 @@
-import { AppWindow, FolderOpen, FolderTree, Globe, Puzzle, Rocket, UsersRound, Zap } from "lucide-react";
+import { AppWindow, FolderOpen, FolderTree, Globe, LayoutDashboard, Puzzle, Rocket, UsersRound, Zap } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
 import { useAppTriggers } from "@/lib/app-triggers";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { useCloudFilesReady } from "@/lib/cloud-files";
 import { t } from "@/lib/i18n";
 import { useAdvancedMode } from "@/lib/interface-mode";
+import { useFeature } from "@/lib/use-feature";
 import { useWebPanels } from "@/lib/web-panel-preferences";
 import { useSidebarToolsLayout, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { useStore } from "@/state/store";
@@ -127,6 +128,15 @@ export function SidebarFooterNav({
   const iconSize = iconsOnly && !rail ? 20 : 16;
   const tone = (active: boolean) => (active ? "text-accent" : "text-ink-secondary");
   const automationsNeedYou = useAutomationsNeedYou();
+  const panels = useFeature("panels");
+  const panelsRow = panels && <NavRow
+    id="panels"
+    label={t("sidebar.nav.panels")}
+    iconsOnly={iconsOnly || toolbar}
+    active={state.activeView === "panels"}
+    icon={(active) => <LayoutDashboard size={iconSize} className={tone(active)} />}
+    onClick={() => dispatch({ type: "showPanels" })}
+  />;
   const automationsRow = <NavRow
     id="automations"
     label={t("sidebar.nav.automations")}
@@ -161,6 +171,7 @@ export function SidebarFooterNav({
 
   const rows = (
     <>
+      {panelsRow}
       {automationsRow}
       {appsRow}
       {(advanced || iconsOnly) && (
