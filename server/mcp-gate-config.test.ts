@@ -27,6 +27,22 @@ describe("MCP scope configuration", () => {
   });
 });
 
+describe("read-only mounts", () => {
+  it("always puts a read-only server behind the gate, a URL server too, without a directory, and refuses one it cannot mount", () => {
+    const local = gateServer({ ...input, readOnly: true })!;
+    expect(local.env.OMB_GATE_READ_ONLY).toBe("1");
+    expect(local.env).not.toHaveProperty("OMB_GATE_TOOL_SCOPE");
+    expect(JSON.parse(local.env.OMB_GATE_UPSTREAM)).toEqual(server);
+    const url = gateServer({ name: "whop", server: remote, threadId: "disposable-thread", budget: 0, readOnly: true, directory: true })!;
+    expect(url.args[0]).toContain("mcp-gate");
+    expect(url.env.OMB_GATE_READ_ONLY).toBe("1");
+    expect(url.env).not.toHaveProperty("OMB_GATE_DIRECTORY");
+    expect(JSON.parse(url.env.OMB_GATE_UPSTREAM).args[0]).toContain("mcp-remote-proxy");
+    expect(() => gateServer({ ...input, server: {}, readOnly: true })).toThrow(/MCP server/i);
+    expect(gateServer({ ...input, toolScope: { allow: [] } })!.env).not.toHaveProperty("OMB_GATE_READ_ONLY");
+  });
+});
+
 describe("result budget", () => {
   it("uses a server's own budget, else the environment's, else the default", () => {
     expect(resultBudget({})).toBe(DEFAULT_RESULT_BUDGET);

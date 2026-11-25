@@ -9,7 +9,7 @@ const run = (access?: "read-and-draft"): RoutineRun => ({
   manual: false, createdAt: 0, threadId: "run-thread", checkKey: "chk-1", ...(access ? { access } : {}),
 });
 
-function fence(access: "read-and-draft" | null = "read-and-draft", mayReach?: (threadId: string, route: string) => boolean) {
+function fence(access: "read-and-draft" | null = "read-and-draft", mayReach?: (threadId: string, route: string) => boolean, readsOwnTools?: (threadId: string) => boolean) {
   const decided: unknown[] = [];
   const drafted: string[] = [];
   const respond = vi.fn(async () => "rejected" as const);
@@ -20,6 +20,7 @@ function fence(access: "read-and-draft" | null = "read-and-draft", mayReach?: (t
     mayDraft: (_key, threadId, to) => threadId === "t-ada" && to === "ada@x.test" && !drafted.includes(threadId),
     drafted: (_key, threadId) => drafted.push(threadId),
     ...(mayReach ? { mayReach } : {}),
+    ...(readsOwnTools ? { readsOwnTools } : {}),
   });
   return { gate, decided, drafted, respond };
 }
@@ -106,6 +107,57 @@ describe("the fence around a read-and-draft run", () => {
     expect(gate.refusesConnectorCall(bot, "run-thread", call("GMAIL_CREATE_EMAIL_DRAFT", { thread_id: "t-ada", recipient_email: "ada@x.test" }))).toBe(true);
     expect(gate.refusesConnectorCall(bot, "run-thread", call("GMAIL_CREATE_EMAIL_DRAFT", { thread_id: "t-other", recipient_email: "ada@x.test" }))).toBe(true);
     expect(gate.refusesConnectorCall(bot, "main-chat", call("GMAIL_SEND_EMAIL"))).toBe(false);
+  });
+});
+
+describe("the fence around a panel card's own update run", () => {
+  const cardRun = (threadId: string) => threadId === "run-thread";
+  const integrations = () => ({
+    composio: { url: "https://relay.test" }, custom: { notes: { command: "notes-mcp" }, shop: { url: "https://shop.test/mcp" } },
+    mcpApps: { notes: [] }, customResultBudgets: { notes: 8_000 }, browser: true, computer: true,
+  }) as never as Parameters<ReturnType<typeof createReadAndDraft>["confine"]>[1];
+
+  it("keeps the bot's own servers behind read-only gates only in a card's run, and drops every other extra tool", () => {
+    const own = integrations();
+    fence("read-and-draft", undefined, cardRun).gate.confine("run-thread", own);
+    expect(Object.keys(own).sort()).toEqual(["composio", "custom", "customReadOnly", "customResultBudgets", "mcpApps"]);
+    expect(own.customReadOnly).toBe(true);
+    const routine = integrations();
+    fence().gate.confine("run-thread", routine);
+    expect(Object.keys(routine)).toEqual(["composio"]);
+    expect(fence("read-and-draft", undefined, cardRun).gate.keepsOwnServers("run-thread")).toBe(true);
+    expect(fence().gate.keepsOwnServers("run-thread")).toBe(false);
+    expect(fence().gate.keepsOwnServers("main-chat")).toBe(true);
+  });
+
+  it("lets a call to a tool of the bot's own servers through, and still refuses every other request", async () => {
+    const { gate, decided, respond } = fence("read-and-draft", undefined, cardRun);
+    gate.confine("run-thread", integrations());
+    const say = vi.fn();
+    const opened = (tool: string, requestType = "permission") => ({ type: "request.opened", threadId: "run-thread", requestId: tool, requestType, tool, summary: tool }) as never;
+    expect(gate.answers(opened("mcp__notes__search"), bot, say)).toBe(true);
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledWith("run-thread", "mcp__notes__search", { behavior: "allow" }));
+    expect(decided).toEqual([expect.objectContaining({ decision: "auto-approved", tool: "mcp__notes__search" })]);
+    expect(say).not.toHaveBeenCalled();
+    for (const tool of ["mcp__other__search", "mcp__agents__memory_update", "WebFetch", "Bash"]) {
+      expect(gate.answers(opened(tool), bot, say)).toBe(true);
+      await vi.waitFor(() => expect(respond).toHaveBeenCalledWith("run-thread", tool, { behavior: "deny", message: READ_AND_DRAFT_REFUSAL }));
+    }
+    expect(gate.answers(opened("mcp__notes__search", "question"), bot, say)).toBe(true);
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledWith("run-thread", "mcp__notes__search", { behavior: "answer", message: READ_AND_DRAFT_REFUSAL }));
+
+    const routine = fence();
+    routine.gate.confine("run-thread", integrations());
+    expect(routine.gate.answers(opened("mcp__notes__search"), bot, say)).toBe(true);
+    await vi.waitFor(() => expect(routine.respond).toHaveBeenCalledWith("run-thread", "mcp__notes__search", { behavior: "deny", message: READ_AND_DRAFT_REFUSAL }));
+  });
+
+  it("reads any connected app in a card's run, and still refuses every write", () => {
+    const { gate } = fence("read-and-draft", undefined, cardRun);
+    expect(gate.refusesConnectorCall(bot, "run-thread", call("SLACK_FETCH_CONVERSATION_HISTORY"))).toBe(false);
+    expect(gate.refusesConnectorCall(bot, "run-thread", call("SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL"))).toBe(true);
+    expect(gate.refusesConnectorCall(bot, "run-thread", call("GMAIL_SEND_EMAIL"))).toBe(true);
+    expect(fence().gate.refusesConnectorCall(bot, "run-thread", call("SLACK_FETCH_CONVERSATION_HISTORY"))).toBe(true);
   });
 });
 

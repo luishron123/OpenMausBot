@@ -1986,6 +1986,24 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(await turn("t-ungated-url", { custom: { docs } })).toBe(String(UNGATED_MCP_OUTPUT_TOKENS));
   });
 
+  it("puts each of a bot's own servers behind a read-only gate when the turn asks, and drops one it cannot gate", async () => {
+    await create();
+    const dump = join(scratch, "read-only-mcp.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    const docs = { type: "http" as const, url: "https://docs.example/mcp", headers: { Authorization: "Bearer tok-docs" } };
+    const { turnId } = await instance.adapter.sendTurn({
+      threadId: "t-read-only", text: "hi",
+      integrations: { custom: { docs, shop: { command: "shop-mcp", args: [], env: {} }, broken: {} as never }, customReadOnly: true },
+    });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    const servers = seen.mcpConfig.mcpServers;
+    expect(servers.docs.env.OMB_GATE_READ_ONLY).toBe("1");
+    expect(servers.shop.env.OMB_GATE_READ_ONLY).toBe("1");
+    expect(servers).not.toHaveProperty("broken");
+    expect(JSON.stringify(seen.argv)).not.toContain("tok-docs");
+  });
+
   // Claude Code advertises no MCP Apps UI extension and keeps tool results to itself, so only OMB's
   // remote proxy can observe a URL app server.
   it("mounts a url app server through the proxy and a url server without apps natively, unchanged", async () => {

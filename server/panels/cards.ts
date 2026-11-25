@@ -14,7 +14,7 @@ import type { RoutineScheduleInput } from "../routine-schedules.ts";
 import type { PanelRoutines } from "./automations.ts";
 import type { PanelHistory } from "./history.ts";
 import type { PanelRunState } from "./run-state.ts";
-import { PANEL_FULL, type PanelStore, type PanelsResult } from "./store.ts";
+import { PANEL_FULL_REFUSAL, type PanelsError, type PanelStore, type PanelsResult } from "./store.ts";
 
 export interface PanelCardsDeps {
   store: PanelStore;
@@ -35,9 +35,9 @@ export const FAILURES_TO_PAUSE = 5;
 export const PAUSED_FAILURE = `Paused after ${FAILURES_TO_PAUSE} failures in a row. Resolve turns it back on.`;
 export const NO_UPDATE_FAILURE = "no_update: the update run ended without calling update_panel_widget.";
 export const ALREADY_UPDATED = "This run already updated its card. Stop here; the next run updates it again.";
-export const ENGINE_FAILURE = "engine: this bot's AI cannot update a card read-only. Switch the bot to a Claude model, then Resolve.";
 export const NOT_FENCED_FAILURE = "engine: this card's automation was made before cards updated read-only; it is read-only now, and its next run updates the card.";
 export const SCHEDULED_FULL = `There are already ${PANEL_LIMITS.scheduledCards} cards that update by themselves. Choose Manual, or remove a scheduled card first.`;
+export const SCHEDULED_REFUSAL: Pick<PanelsError, "error" | "errorKey"> = { error: SCHEDULED_FULL, errorKey: "panels.limit.scheduled" };
 
 const GOING = new Set(["queued", "running", "waiting"]);
 const ENDED_BADLY = new Set(["completed", "failed"]);
@@ -84,6 +84,7 @@ const sameWidget = (a: PanelCard["widget"], b: PanelCard["widget"]) => JSON.stri
 export function createPanelCards(deps: PanelCardsDeps) {
   const { store, history, state } = deps;
   const now = () => deps.now?.() ?? Date.now();
+  const fenced = (botId: string): boolean => deps.fenced?.(botId) ?? true;
 
   const routineById = (routineId: string | undefined) => (routineId ? deps.routines()?.listRoutines().find((one) => one.id === routineId) : undefined);
   /** The card whose own routine this is. */
@@ -116,10 +117,10 @@ export function createPanelCards(deps: PanelCardsDeps) {
   }
 
   /** Why the person cannot keep this draft on `panel`, in their words; null when they can. */
-  function keepRefusal(panel: Panel, card: PanelCard): string | null {
+  function keepRefusal(panel: Panel, card: PanelCard): Pick<PanelsError, "error" | "errorKey"> | null {
     if (!card.draft) return null;
-    if (panel.cards.filter((one) => !one.draft && one.id !== card.id).length >= PANEL_LIMITS.cardsPerPanel) return PANEL_FULL;
-    return limitRefusal(card.id, card.schedule) ? SCHEDULED_FULL : null;
+    if (panel.cards.filter((one) => !one.draft && one.id !== card.id).length >= PANEL_LIMITS.cardsPerPanel) return PANEL_FULL_REFUSAL;
+    return limitRefusal(card.id, card.schedule) ? SCHEDULED_REFUSAL : null;
   }
 
   /** Makes, changes or removes a card's own routine to match the card: a card with a prompt has one, run by `botId` (the
@@ -225,7 +226,7 @@ export function createPanelCards(deps: PanelCardsDeps) {
       if (typeof run.cost === "number" && run.cost > 0) history.costed(card.id, run.id, run.cost);
       if (card.status !== "failed") return null;
     } else if (ENDED_BADLY.has(run.status)) {
-      const refused = run.status === "failed" && (run.error === ENGINE_FAILURE || run.error === NOT_FENCED_FAILURE) ? run.error : null;
+      const refused = run.status === "failed" && run.error === NOT_FENCED_FAILURE ? run.error : null;
       const failed = store.updateCard(panel.id, { cardId: card.id }, { failed: refused ?? NO_UPDATE_FAILURE, failureCode: refused ? "engine" : "no_update", botId: card.botId });
       if (failed.ok) updatedCard(panel, card, failed.card, { run });
       state.ended(run.id, run.routineId);
@@ -286,8 +287,9 @@ export function createPanelCards(deps: PanelCardsDeps) {
 
   /** A card as the person's screen reads it: `held` while its own routine waits on something outside the app. */
   function shown(card: PanelCard): PanelCard {
-    const held = routineById(card.routineId)?.heldFor;
-    return held ? { ...card, held: { reason: held } } : card;
+    const own = routineById(card.routineId);
+    if (!own) return card;
+    return { ...card, ...(own.heldFor ? { held: { reason: own.heldFor } } : {}), updateAccess: fenced(own.botId) ? "fenced" : "bot" };
   }
 
   /** The run note for a card's own routine; null for any other routine. */
@@ -303,13 +305,17 @@ export function createPanelCards(deps: PanelCardsDeps) {
     ].join("\n");
   }
 
-  /** Why a card's own run may not start: its bot's engine is not fenced, or the routine is not read-only yet (made by an
-   * earlier build; it is made read-only here for its next run). Null for any other run. */
+  /** Why a card's own run may not start: its routine is not read-only yet (made by an earlier build; it is made read-only
+   * here for its next run). Null for any other run. A bot whose engine the fence cannot hold runs it as any automation of
+   * that bot runs, with that bot's own access; its routine stays read-only for an engine that can. */
   function runRefusal(run: RoutineRun): string | null {
     if (!deps.enabled()) return null;
     const own = cardOf(run.routineId) ? routineById(run.routineId) : undefined;
     if (!own) return null;
-    if (deps.fenced && !deps.fenced(run.botId)) return ENGINE_FAILURE;
+    if (!fenced(run.botId)) {
+      delete run.access;
+      return null;
+    }
     if (run.access === READ_ONLY) return null;
     try { deps.routines()?.update(own.id, { access: READ_ONLY }); } catch { /* refused again next run */ }
     return NOT_FENCED_FAILURE;

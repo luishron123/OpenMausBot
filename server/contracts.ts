@@ -206,6 +206,9 @@ export interface SendTurnInput {
     dweb?: { url: string };
     /** The user's MCP servers, mounted without any pre-allow; a driver skips a kind it cannot speak. */
     custom?: Record<string, McpServerSpec>;
+    /** Security: every `custom` server, and every server of the bot's own folder, offers only the tools it marks
+     * read-only and not destructive (mcp-gate.ts); a driver that cannot gate one leaves it out. */
+    customReadOnly?: boolean;
     /** The `custom` servers this turn mounts through an MCP Apps observer; `extension`: advertise the
      * UI extension (false once the server refused it). A server not named here is mounted unchanged. */
     mcpApps?: Record<string, { extension: boolean }>;

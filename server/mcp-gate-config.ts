@@ -181,14 +181,18 @@ export function gateServer(input: {
   schemaProfile?: ToolSchemaProfileId;
   /** The engine's provider limits how many tools a request carries: the gate lists at most OMB_TOOL_LIMIT of them. */
   limitsTools?: boolean;
+  /** Only the tools the server marks read-only and not destructive (mcp-gate.ts); never null for a supported server. */
+  readOnly?: boolean;
 }): { command: string; args: string[]; env: Record<string, string> } | null {
   const { name, server, budget, apps, schemaProfile, limitsTools } = input;
   const parsed = parseToolScope(input.toolScope);
   if (!parsed.ok) throw new Error(parsed.error);
+  const readOnly = input.readOnly === true;
   const scoped = parsed.scope !== undefined;
+  const restricted = scoped || readOnly;
   const remote = remoteMcpSpec(server) !== undefined;
-  if (budget <= 0 && !scoped && !apps && !schemaProfile && !limitsTools) return null;
-  const directory = input.directory === true && remote;
+  if (budget <= 0 && !restricted && !apps && !schemaProfile && !limitsTools) return null;
+  const directory = input.directory === true && remote && !readOnly;
   const proxyOptions = {
     nodeEnv: input.nodeEnv,
     execPath: input.execPath,
@@ -196,14 +200,14 @@ export function gateServer(input: {
     ...(directory ? { directory: { name, ...(scoped ? { toolScope: parsed.scope } : {}) } } : {}),
     ...(apps && remote ? { apps } : {}),
   };
-  if (!scoped && remote && !(input.gateRemote === true && budget > 0)) {
+  if (!restricted && remote && !(input.gateRemote === true && budget > 0)) {
     if (!apps && !limitsTools) return null;
     const proxy = mcpStdioServer(server, proxyOptions);
     return proxy ? { command: proxy.command, args: proxy.args ?? [], env: proxy.env ?? {} } : null;
   }
   const spec = mcpStdioServer(server, proxyOptions);
   if (!spec) {
-    if (scoped) throw new Error("Tool selection requires a supported MCP server.");
+    if (restricted) throw new Error("Tool selection requires a supported MCP server.");
     return null;
   }
   // Security: a selection matches the name in the call, so behind one the agents server is never bridged,
@@ -216,9 +220,10 @@ export function gateServer(input: {
     OMB_GATE_BUDGET: String(budget),
     ...(scoped ? { OMB_GATE_TOOL_SCOPE: JSON.stringify(parsed.scope) } : {}),
     ...(directory ? { OMB_GATE_DIRECTORY: "1" } : {}),
+    ...(readOnly ? { OMB_GATE_READ_ONLY: "1" } : {}),
     ...(apps && !remote ? { [GATE_APPS_ENV]: JSON.stringify(apps) } : {}),
   };
-  if (input.configEnvName && ((!scoped && !(apps && !remote)) || !/^OMB_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
+  if (input.configEnvName && ((!restricted && !(apps && !remote)) || !/^OMB_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
     throw new Error("Invalid private MCP gate configuration.");
   }
   return {

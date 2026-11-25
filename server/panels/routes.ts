@@ -9,8 +9,8 @@ import { canonicalWidget } from "../chat-widgets.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
-import type { PanelCards } from "./cards.ts";
-import { parseCard, parsePanel, type PanelStore, type PanelsResult } from "./store.ts";
+import { SCHEDULED_REFUSAL, type PanelCards } from "./cards.ts";
+import { errorBody, parseCard, parsePanel, type PanelStore, type PanelsResult } from "./store.ts";
 
 export interface PanelRouteDeps {
   store: PanelStore;
@@ -65,7 +65,7 @@ export function createPanelRoutes(deps: PanelRouteDeps): RouteHandler {
     const notFound = () => json(res, 404, { error: "No such panel." });
     const refused = () => json(res, 403, { error: "Only people who can chat with the bot that made this panel can change it." });
     const answer = <T extends object>(result: PanelsResult<T>, body: (done: T) => Record<string, unknown>) =>
-      result.ok ? json(res, 200, body(result)) : json(res, result.status, { error: result.error });
+      result.ok ? json(res, 200, body(result)) : json(res, result.status, errorBody(result));
     /** The panel by id when this person may see it; with `change`, only when they may change it too (answered otherwise). */
     const reach = (panelId: string, change: boolean): Panel | null => {
       const panel = store.get(panelId);
@@ -126,7 +126,7 @@ export function createPanelRoutes(deps: PanelRouteDeps): RouteHandler {
       if (!sent) return;
       if (!deps.refresh) return json(res, 404, { error: "No automation keeps this panel." });
       const ran = deps.refresh(auth, panel, sent.routineId);
-      return ran.ok ? json(res, 202, { ok: true }) : json(res, ran.status, { error: ran.error });
+      return ran.ok ? json(res, 202, { ok: true }) : json(res, ran.status, errorBody(ran));
     }
 
     const card = CARD.exec(path);
@@ -141,7 +141,7 @@ export function createPanelRoutes(deps: PanelRouteDeps): RouteHandler {
           return json(res, 403, { error: "You can only give a card to a bot you can chat with." });
         }
         const refusal = deps.cards?.limitRefusal(cardId, sent.schedule);
-        if (refusal) return json(res, 409, { error: `There are already ${PANEL_LIMITS.scheduledCards} cards that update by themselves. Choose Manual, or remove a scheduled card first.` });
+        if (refusal) return json(res, 409, errorBody(SCHEDULED_REFUSAL));
         const { title: newTitle, size, botId, prompt, schedule, alert, notify } = sent;
         const patched = store.patchCard(panel.id, cardId, {
           ...(newTitle !== undefined ? { title: newTitle } : {}), ...(size ? { size } : {}), ...(botId ? { botId } : {}),
@@ -150,11 +150,11 @@ export function createPanelRoutes(deps: PanelRouteDeps): RouteHandler {
             ...(alert !== undefined ? { alert: alert ? redactSecretsInText(alert) : null } : {}), ...(notify !== undefined ? { notify } : {}),
           },
         });
-        if (!patched.ok) return json(res, patched.status, { error: patched.error });
+        if (!patched.ok) return json(res, patched.status, errorBody(patched));
         const automated = [prompt, schedule, alert, botId, newTitle].some((one) => one !== undefined) && (patched.card.prompt || patched.card.routineId);
         if (automated && deps.cards) {
           const synced = deps.cards.syncOwn(panel.id, cardId, botId ? { botId } : {});
-          if (!synced.ok) return json(res, synced.status, { error: synced.error });
+          if (!synced.ok) return json(res, synced.status, errorBody(synced));
         }
         return json(res, 200, { panel: withAutomations(auth, store.get(panel.id)!) });
       }

@@ -28,7 +28,7 @@ function gateEnvironment(): NodeJS.ProcessEnv {
     const value = JSON.parse(process.env[key] ?? "");
     if (!value || typeof value !== "object" || Array.isArray(value)
       || !["OMB_GATE_NAME", "OMB_GATE_UPSTREAM"].every(name => typeof value[name] === "string")
-      || (typeof value.OMB_GATE_TOOL_SCOPE !== "string" && typeof value[GATE_APPS_ENV] !== "string")
+      || (typeof value.OMB_GATE_TOOL_SCOPE !== "string" && typeof value[GATE_APPS_ENV] !== "string" && value.OMB_GATE_READ_ONLY !== "1")
       || !Object.entries(value).every(([name, setting]) => GATE_ENV_KEYS.includes(name) && typeof setting === "string")) throw new Error();
     return value;
   } catch {
@@ -36,7 +36,7 @@ function gateEnvironment(): NodeJS.ProcessEnv {
   }
 }
 /** The gate's own settings never reach the upstream server's environment. */
-const GATE_ENV_KEYS = ["OMB_GATE_NAME", "OMB_GATE_SPILL_DIR", "OMB_GATE_BUDGET", "OMB_GATE_UPSTREAM", "OMB_GATE_SPILL_HINT", "OMB_GATE_TOOL_SCOPE", "OMB_GATE_DIRECTORY", GATE_APPS_ENV];
+const GATE_ENV_KEYS = ["OMB_GATE_NAME", "OMB_GATE_SPILL_DIR", "OMB_GATE_BUDGET", "OMB_GATE_UPSTREAM", "OMB_GATE_SPILL_HINT", "OMB_GATE_TOOL_SCOPE", "OMB_GATE_DIRECTORY", "OMB_GATE_READ_ONLY", GATE_APPS_ENV];
 const gateEnv = gateEnvironment();
 const NAME = gateEnv.OMB_GATE_NAME || "mcp";
 const SPILL_DIR = gateEnv.OMB_GATE_SPILL_DIR || "";
@@ -45,6 +45,10 @@ const BUDGET = Number.isFinite(rawBudget) && rawBudget >= 0 ? rawBudget : DEFAUL
 const SPILL_MAX_AGE_MS = 24 * 60 * 60_000;
 const SPILL_HINT = gateEnv.OMB_GATE_SPILL_HINT === "1";
 const DIRECTORY = gateEnv.OMB_GATE_DIRECTORY === "1";
+/** Security: only the tools the server's own last listing marked read-only and not destructive are listed and called;
+ * a call before any listing, or to a tool listed otherwise, is refused. */
+const READ_ONLY = gateEnv.OMB_GATE_READ_ONLY === "1";
+const READ_ONLY_REFUSAL = "This run only reads: its server does not mark this tool read-only. Do not try another way.";
 const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
 const TOOL_LIMIT = toolLimitFromEnv(process.env);
 const TOOL_CHARS = toolCharsFromEnv(process.env);
@@ -212,6 +216,9 @@ function trimCallResult(result: Json, tool: string): boolean {
 
 // Validate before starting a process: corrupt policy must never become pass-through.
 const scope = toolScope();
+const restricted = scope !== undefined || READ_ONLY;
+const readable = new Set<string>();
+const readsOnly = (tool: Json): boolean => isRecord(tool.annotations) && tool.annotations.readOnlyHint === true && tool.annotations.destructiveHint !== true;
 const observer = (() => {
   try {
     const mount = parseAppMount(gateEnv[GATE_APPS_ENV]);
@@ -296,9 +303,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       const parsed: unknown = JSON.parse(line);
       if (isRecord(parsed)) message = parsed;
     } catch {
-      if (scope) return rejectRequest(null, -32700, "Invalid JSON-RPC frame");
+      if (restricted) return rejectRequest(null, -32700, "Invalid JSON-RPC frame");
     }
-    if (scope && (!message || message.jsonrpc !== "2.0")) return rejectRequest(message?.id, -32600, "Invalid JSON-RPC frame");
+    if (restricted && (!message || message.jsonrpc !== "2.0")) return rejectRequest(message?.id, -32600, "Invalid JSON-RPC frame");
   }
   const id = requestKey(message?.id);
   const params = isRecord(message?.params) ? message.params : undefined;
@@ -307,6 +314,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     if (!id) return;
     process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: answerQuery(store, params.arguments, BUDGET) })}\n`);
     return;
+  }
+  if (READ_ONLY && message?.method === "tools/call" && (typeof params?.name !== "string" || !readable.has(params.name))) {
+    return rejectRequest(message.id, -32602, READ_ONLY_REFUSAL);
   }
   if (scope && message?.method === "tools/call") {
     if (!id || typeof params?.name !== "string"
@@ -327,11 +337,11 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const target = callTarget(params.name, params.arguments);
     if (target !== undefined && appOnly.has(target)) return rejectRequest(message.id, -32602, APP_ONLY_REFUSAL);
   }
-  if (scope && message?.method === "tools/list" && !id) {
+  if (restricted && message?.method === "tools/list" && !id) {
     return rejectRequest(message.id, -32600, "Tool listing needs a request ID");
   }
   if (id && typeof message?.method === "string") {
-    if (scope && pending.has(id)) fail("duplicate request ID on a restricted connection");
+    if (restricted && pending.has(id)) fail("duplicate request ID on a restricted connection");
     if (message.method === "tools/call") {
       const name = typeof params?.name === "string" ? params.name : "tool";
       const target = callTarget(name, params?.arguments);
@@ -342,7 +352,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         return child.stdin.write(`${JSON.stringify({ ...message, params: withUiExtension(message.params) })}\n`);
       }
       pending.set(id, { kind: "initialize" });
-    } else if (message.method === "tools/list" || scope) {
+    } else if (message.method === "tools/list" || restricted) {
       pending.set(id, { kind: message.method === "tools/list" ? "list" : "other" });
     }
   }
@@ -361,16 +371,16 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     const parsed: unknown = JSON.parse(line);
     if (isRecord(parsed)) message = parsed;
   } catch {
-    if (scope) fail("unreadable upstream frame on a restricted connection");
+    if (restricted) fail("unreadable upstream frame on a restricted connection");
   }
-  if (!message || (scope && message.jsonrpc !== "2.0")) {
-    if (scope) fail("invalid upstream frame on a restricted connection");
+  if (!message || (restricted && message.jsonrpc !== "2.0")) {
+    if (restricted) fail("invalid upstream frame on a restricted connection");
     process.stdout.write(`${line}\n`);
     return;
   }
   const id = typeof message.method === "string" ? undefined : requestKey(message.id);
   const request = id === undefined ? undefined : pending.get(id);
-  if (scope && id !== undefined && !request) fail("unrequested upstream response on a restricted connection");
+  if (restricted && id !== undefined && !request) fail("unrequested upstream response on a restricted connection");
   if (request?.kind === "initialize" && request.original && message.error !== undefined && id !== undefined) {
     pending.set(id, { kind: "initialize" });
     process.stderr.write(`mcp-gate(${NAME}): the server refused the MCP Apps extension; connecting without it\n`);
@@ -391,14 +401,21 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     }
     result.tools = result.tools.filter(modelVisible);
   }
-  if (scope && request?.kind === "list" && message.error === undefined) {
+  if (restricted && request?.kind === "list" && message.error === undefined) {
     if (!isRecord(result) || !Array.isArray(result.tools)
       || !result.tools.every((tool: unknown) => isRecord(tool) && typeof tool.name === "string" && tool.name.trim().length > 0)
       || (result.nextCursor !== undefined && typeof result.nextCursor !== "string")) {
       return rejectRequest(message.id, -32603, "Invalid tool catalog on a restricted connection");
     }
-    result.tools = result.tools.filter((tool: Json) => (DIRECTORY && isDirectoryTool(tool.name))
+    if (scope) result.tools = result.tools.filter((tool: Json) => (DIRECTORY && isDirectoryTool(tool.name))
       || allowsTool(scope, { kind: "mcp", server: NAME, name: tool.name as string }));
+    if (READ_ONLY) {
+      for (const tool of result.tools as Json[]) {
+        if (readsOnly(tool)) readable.add(tool.name as string);
+        else readable.delete(tool.name as string);
+      }
+      result.tools = (result.tools as Json[]).filter(readsOnly);
+    }
   }
   if (SCHEMA_PROFILE && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
     result.tools = fitToolList(result.tools, SCHEMA_PROFILE, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`));

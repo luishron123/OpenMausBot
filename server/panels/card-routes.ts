@@ -13,10 +13,10 @@ import { redactSecretsInText } from "../redact.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { Routine, RoutineRun } from "../routines.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
-import { runsPerDay, SCHEDULED_FULL, type PanelCards } from "./cards.ts";
+import { runsPerDay, SCHEDULED_REFUSAL, type PanelCards } from "./cards.ts";
 import type { PanelHistory } from "./history.ts";
 import type { Pinnable } from "./pinnable.ts";
-import { freeCardKey, type PanelStore, type PanelsResult } from "./store.ts";
+import { errorBody, freeCardKey, type PanelStore, type PanelsResult } from "./store.ts";
 import { panelSuggestions, type SuggestionBot } from "./suggestions.ts";
 
 export interface PanelCardRouteDeps {
@@ -75,7 +75,7 @@ export function createPanelCardRoutes(deps: PanelCardRouteDeps): RouteHandler {
     if (method === "GET") cards.sweep();
     const params = url?.searchParams ?? new URL(req.url ?? "/", "http://localhost").searchParams;
     const answer = <T extends object>(result: PanelsResult<T>, status: number, body: (done: T) => Record<string, unknown>) =>
-      result.ok ? json(res, status, body(result)) : json(res, result.status, { error: result.error });
+      result.ok ? json(res, status, body(result)) : json(res, result.status, errorBody(result));
     const body = async <T>(schema: z.ZodType<T>, error: string): Promise<T | null> => {
       const parsed = schema.safeParse((await readBody(req)) ?? {});
       if (parsed.success) return parsed.data;
@@ -148,7 +148,7 @@ export function createPanelCardRoutes(deps: PanelCardRouteDeps): RouteHandler {
       const schedule = sent.schedule ?? (sent.cadence ? PANEL_CADENCE_SCHEDULE[sent.cadence] : undefined);
       if (!schedule) return json(res, 400, { error: "Send schedule: half, hour, day, week or manual." });
       if (!chats(auth, sent.botId)) return json(res, 403, { error: "You can only give a card to a bot you can chat with." });
-      if (!sent.test && cards.limitRefusal(undefined, schedule)) return json(res, 409, { error: SCHEDULED_FULL });
+      if (!sent.test && cards.limitRefusal(undefined, schedule)) return json(res, 409, errorBody(SCHEDULED_REFUSAL));
       const title = sent.title ?? titleFrom(sent.prompt);
       const set = store.setCard(panel.id, {
         key: freeCardKey(panel, title), title, size: sent.size, botId: sent.botId,
@@ -158,11 +158,11 @@ export function createPanelCardRoutes(deps: PanelCardRouteDeps): RouteHandler {
           ...(sent.test ? { draft: true, draftAt: new Date().toISOString() } : {}),
         },
       });
-      if (!set.ok) return json(res, set.status, { error: set.error });
+      if (!set.ok) return json(res, set.status, errorBody(set));
       const synced = cards.syncOwn(panel.id, set.card.id, { botId: sent.botId, run: true });
       if (!synced.ok) {
         store.removeCard(panel.id, set.card.id);
-        return json(res, synced.status, { error: synced.error });
+        return json(res, synced.status, errorBody(synced));
       }
       if (synced.runId) deps.personStarted?.(auth, synced.runId);
       const after = store.get(panel.id)!;
@@ -208,15 +208,15 @@ export function createPanelCardRoutes(deps: PanelCardRouteDeps): RouteHandler {
       const to = sent.panelId && sent.panelId !== panel.id ? reach(sent.panelId) : panel;
       if (!to) return;
       const refusal = cards.keepRefusal(to, card);
-      if (refusal) return json(res, 409, { error: refusal });
+      if (refusal) return json(res, 409, errorBody(refusal));
       const draftAgain = card.draft ? { draft: true, draftAt: card.draftAt ?? new Date().toISOString() } as const : null;
       const kept = to.id === panel.id ? store.keepDraft(panel.id, card.id) : store.moveCard(panel.id, card.id, to.id, { draft: null, draftAt: null });
-      if (!kept.ok) return json(res, kept.status, { error: kept.error });
+      if (!kept.ok) return json(res, kept.status, errorBody(kept));
       const synced = cards.kept(to.id, kept.card);
       if (!synced.ok) {
         if (to.id !== panel.id) store.moveCard(to.id, card.id, panel.id, draftAgain ?? undefined);
         else if (draftAgain) store.patchCard(panel.id, card.id, { extra: draftAgain });
-        return json(res, synced.status, { error: synced.error });
+        return json(res, synced.status, errorBody(synced));
       }
       return json(res, 200, { panel: present(store.get(to.id)!) });
     }
@@ -233,7 +233,7 @@ export function createPanelCardRoutes(deps: PanelCardRouteDeps): RouteHandler {
       if (!await body(empty, "Send nothing.")) return;
       ran = verb === "resolve" ? cards.resolve(panel, card) : cards.runCard(panel, card);
     }
-    if (!ran.ok) return json(res, ran.status, { error: ran.error });
+    if (!ran.ok) return json(res, ran.status, errorBody(ran));
     deps.personStarted?.(auth, ran.run.id);
     return json(res, 202, { ok: true });
   };

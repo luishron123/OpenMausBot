@@ -352,6 +352,50 @@ describe("mcp-gate", () => {
     expect(lines).toEqual([]);
   });
 
+  // Lists tools with and without the read-only hint, and records each call it runs.
+  const ANNOTATED_UPSTREAM = `
+const { createInterface } = require("node:readline");
+const { appendFileSync } = require("node:fs");
+const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
+const tool = (name, annotations) => ({ name, inputSchema: { type: "object" }, ...(annotations ? { annotations } : {}) });
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const msg = JSON.parse(line);
+  if (msg.method === "tools/list") return send(msg.id, { tools: [
+    tool("read", { readOnlyHint: true }), tool("plain"), tool("write", { readOnlyHint: false }),
+    tool("wipe", { readOnlyHint: true, destructiveHint: true }), tool("open", { readOnlyHint: "true" }),
+  ] });
+  if (msg.method === "tools/call") appendFileSync(process.env.SCRIPT + ".calls", msg.params.name + "\\n");
+  send(msg.id, { content: [{ type: "text", text: "executed" }] });
+});
+`;
+
+  it("in a read-only run lists and runs only tools their server marks read-only and not destructive, refusing every call before the list", async () => {
+    start({}, { OMB_GATE_READ_ONLY: "1", OMB_GATE_BUDGET: "0" }, ANNOTATED_UPSTREAM);
+    const early = await call("read");
+    expect(early.error).toMatchObject({ code: -32602 });
+    expect(existsSync(join(scratch, "reply.json.calls"))).toBe(false);
+    send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    expect(JSON.parse(await nextLine()).result.tools.map((one: { name: string }) => one.name)).toEqual(["read"]);
+    for (const [index, name] of ["plain", "write", "wipe", "open", "missing"].entries()) {
+      const refused = await call(name, 10 + index);
+      expect(refused.error).toMatchObject({ code: -32602 });
+      expect(refused.error.message).toContain("Do not try another way");
+    }
+    expect(existsSync(join(scratch, "reply.json.calls"))).toBe(false);
+    expect((await call("read", 20)).result.content[0].text).toBe("executed");
+    expect(readFileSync(join(scratch, "reply.json.calls"), "utf8")).toBe("read\n");
+  });
+
+  it("in a read-only run applies a tool scope too, and still refuses an unreadable frame", async () => {
+    start({}, { OMB_GATE_READ_ONLY: "1", OMB_GATE_BUDGET: "0", OMB_GATE_TOOL_SCOPE: JSON.stringify({ allow: ["mcp:shop:*"], deny: ["mcp:shop:read"] }) }, ANNOTATED_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(JSON.parse(await nextLine()).result.tools).toEqual([]);
+    expect((await call("read", 2)).error).toMatchObject({ code: -32602 });
+    send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: ["read"] } });
+    expect(JSON.parse(await nextLine()).error).toMatchObject({ code: -32602 });
+    expect(existsSync(join(scratch, "reply.json.calls"))).toBe(false);
+  });
+
   it("rejects invalid call parameters and unreadable client frames locally", async () => {
     start({}, selected, SCOPED_UPSTREAM);
     send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: ["read"] } });

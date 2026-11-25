@@ -12,7 +12,7 @@ import type { RequestAuth } from "../request-auth.ts";
 import type { Routine, RoutineInput, RoutineRun } from "../routines.ts";
 import { dispatchRoutes } from "../routes/table.ts";
 import type { PanelRoutines } from "./automations.ts";
-import { ALREADY_UPDATED, ENGINE_FAILURE, FAILURES_TO_PAUSE, NO_UPDATE_FAILURE, NOT_FENCED_FAILURE, PAUSED_FAILURE, SCHEDULED_FULL, routineSchedule, scheduleOf } from "./cards.ts";
+import { ALREADY_UPDATED, FAILURES_TO_PAUSE, NO_UPDATE_FAILURE, NOT_FENCED_FAILURE, PAUSED_FAILURE, SCHEDULED_FULL, routineSchedule, scheduleOf } from "./cards.ts";
 import type { PanelChats, PinnableMessage } from "./pinnable.ts";
 import { PANEL_FULL } from "./store.ts";
 import { createPanels, type PanelsDeps } from "./wiring.ts";
@@ -193,7 +193,9 @@ it(`stops at ${PANEL_LIMITS.scheduledCards} cards that update by themselves, and
   const manual = await harness.tool("set-card", { panel_id: "daily-sales", card_key: "one-more", title: "One more", prompt: "Orders", schedule: "manual" });
   expect(manual.status).toBe(200);
   const panelId = harness.store.byKey("daily-sales")!.id;
-  expect((await harness.api(`/api/panels/${panelId}/cards/new`, "POST", { prompt: "Refunds", format: "kpi", size: "s", botId: "scout", schedule: "hour", notify: false, test: false })).status).toBe(409);
+  const manualId = harness.store.get(panelId)!.cards.find((one) => one.key === "one-more")!.id;
+  expect(await harness.api(`/api/panels/${panelId}/cards/${manualId}`, "PATCH", { schedule: "hour" })).toMatchObject({ status: 409, body: { errorKey: "panels.limit.scheduled" } });
+  expect(await harness.api(`/api/panels/${panelId}/cards/new`, "POST", { prompt: "Refunds", format: "kpi", size: "s", botId: "scout", schedule: "hour", notify: false, test: false })).toMatchObject({ status: 409, body: { error: SCHEDULED_FULL, errorKey: "panels.limit.scheduled" } });
 });
 
 it("lets a card's own run update only its card, once, and refuses every other panel tool", async () => {
@@ -446,7 +448,7 @@ it("suggests cards from the bot's automations first, then from what the bot is f
   expect((await harness.api("/api/panels/suggestions?botId=hidden")).status).toBe(404);
 });
 
-it("makes a card's own routine read-only, keeps its answer out of every chat, and refuses an engine the fence does not hold", async () => {
+it("makes a card's own routine read-only, keeps its answer out of every chat, and runs it at the bot's own access on an engine the fence does not hold", async () => {
   const fencedBots = new Set(["scout"]);
   const harness = await serve({ fenced: (botId) => fencedBots.has(botId) });
   const panelId = await salesPanel(harness);
@@ -470,12 +472,23 @@ it("makes a card's own routine read-only, keeps its answer out of every chat, an
   expect(harness.panels.runRefusal(older)).toBe(NOT_FENCED_FAILURE);
   expect(own.access).toBe("read-and-draft");
 
+  const shownCard = async () => (await harness.api(`/api/panels/${panelId}`)).body.panel.cards[0];
+  expect((await shownCard()).updateAccess).toBe("fenced");
   fencedBots.delete("scout");
+  expect((await shownCard()).updateAccess).toBe("bot");
   const unfenced = harness.manager.runNow(own.id)!;
-  expect(harness.panels.runRefusal(unfenced)).toBe(ENGINE_FAILURE);
-  unfenced.error = ENGINE_FAILURE;
-  harness.end(unfenced, "failed");
-  expect(harness.store.get(panelId)!.cards[0]).toMatchObject({ status: "failed", failure: ENGINE_FAILURE, failureCode: "engine" });
+  expect(unfenced.access).toBe("read-and-draft");
+  expect(harness.panels.runRefusal(unfenced)).toBeNull();
+  expect(unfenced.access).toBeUndefined();
+  expect(own.access).toBe("read-and-draft");
+  expect(harness.panels.quiet(unfenced)).toBe(true);
+  expect(harness.panels.readsOwnTools(unfenced.threadId!)).toBe(true);
+  expect(harness.panels.readsOwnTools(other.threadId!)).toBe(false);
+
+  harness.end(unfenced, "completed");
+  expect(harness.store.get(panelId)!.cards[0]).toMatchObject({ status: "failed", failure: NO_UPDATE_FAILURE, failureCode: "no_update" });
+  const stored = JSON.parse(readFileSync(join(harness.dataDir, "panels.json"), "utf8")) as { panels: Array<{ cards: object[] }> };
+  expect(stored.panels[0]!.cards[0]).not.toHaveProperty("updateAccess");
 });
 
 it("never counts a refusal of an older card routine toward the pause", async () => {
@@ -538,9 +551,9 @@ it("keeps tests out of the 24-card and scheduled limits, and checks both when a 
   const draft = await test("Refunds");
   expect(draft.status).toBe(202);
   const full = await harness.api(`/api/panels/${panelId}/cards/${draft.body.card.id}/keep`, "POST", {});
-  expect(full).toMatchObject({ status: 409, body: { error: PANEL_FULL } });
+  expect(full).toMatchObject({ status: 409, body: { error: PANEL_FULL, errorKey: "panels.limit.panelFull" } });
   for (let more = 1; more < PANEL_LIMITS.draftsPerPanel; more++) expect((await test(`Test ${more}`)).status).toBe(202);
-  expect((await test("One too many")).status).toBe(409);
+  expect(await test("One too many")).toMatchObject({ status: 409, body: { error: expect.stringContaining("tests going"), errorKey: "panels.limit.drafts" } });
 
   const other = harness.store.create({ title: "Busy", createdBy: { botId: "scout" } });
   if (!other.ok) throw new Error(other.error);
@@ -552,10 +565,10 @@ it("keeps tests out of the 24-card and scheduled limits, and checks both when a 
   const moved = await harness.api(`/api/panels/${panelId}/cards/${draft.body.card.id}/keep`, "POST", { panelId: other.panel.id });
   expect(moved.status).toBe(200);
   expect(moved.body.panel.cards[0]).toMatchObject({ id: draft.body.card.id });
-  expect((await harness.api(`/api/panels/${panelId}/cards/new`, "POST", { prompt: "Live", format: "kpi", size: "s", botId: "scout", schedule: "week", notify: false, test: false })).body.error).toBe(SCHEDULED_FULL);
+  expect((await harness.api(`/api/panels/${panelId}/cards/new`, "POST", { prompt: "Live", format: "kpi", size: "s", botId: "scout", schedule: "week", notify: false, test: false })).body).toEqual({ error: SCHEDULED_FULL, errorKey: "panels.limit.scheduled" });
   expect((await test("Still a test")).status).toBe(202);
   const second = harness.store.get(panelId)!.cards.find((one) => one.draft)!;
-  expect(await harness.api(`/api/panels/${panelId}/cards/${second.id}/keep`, "POST", { panelId: other.panel.id })).toMatchObject({ status: 409, body: { error: SCHEDULED_FULL } });
+  expect(await harness.api(`/api/panels/${panelId}/cards/${second.id}/keep`, "POST", { panelId: other.panel.id })).toMatchObject({ status: 409, body: { error: SCHEDULED_FULL, errorKey: "panels.limit.scheduled" } });
   expect(harness.store.get(panelId)!.cards.find((one) => one.id === second.id)).toMatchObject({ draft: true });
 
   const onDisk = JSON.parse(readFileSync(join(harness.dataDir, "panels.json"), "utf8"));

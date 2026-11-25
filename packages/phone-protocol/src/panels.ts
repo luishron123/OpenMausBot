@@ -30,9 +30,27 @@ export const PANEL_LIMITS = {
 
 /** Why a card's own automation failed, for the screen to say in the person's language; `failure` keeps an English
  * sentence for builds that do not know the code. "paused": five failures in a row turned it off. "no_update": a run
- * ended without updating the card. "engine": the bot's AI cannot run it read-only. */
+ * ended without updating the card. "engine": the run was refused once, since its automation was made before cards
+ * updated read-only. */
 export const PANEL_FAILURE_CODES = ["paused", "no_update", "engine"] as const;
 export type PanelFailureCode = (typeof PANEL_FAILURE_CODES)[number];
+
+/** Which limit a 409 refusal reached, for the screen to say in the person's language: the panel has
+ * `PANEL_LIMITS.cardsPerPanel` cards, `PANEL_LIMITS.scheduledCards` cards already update by themselves, or the panel has
+ * `PANEL_LIMITS.draftsPerPanel` tests going. */
+export const PANEL_LIMIT_ERROR_KEYS = ["panels.limit.panelFull", "panels.limit.scheduled", "panels.limit.drafts"] as const;
+export type PanelLimitErrorKey = (typeof PANEL_LIMIT_ERROR_KEYS)[number];
+
+/** The body of a refused panel request. `error` is an English sentence for builds that do not know `errorKey`. */
+export interface PanelErrorBody {
+  error: string;
+  errorKey?: PanelLimitErrorKey;
+}
+
+/** How a card's own automation runs. "fenced": read-only, inside OpenMausBot's fence. "bot": this bot's AI cannot run it
+ * fenced, so it runs as any automation of that bot does, with that bot's own access. */
+export const PANEL_UPDATE_ACCESS = ["fenced", "bot"] as const;
+export type PanelUpdateAccess = (typeof PANEL_UPDATE_ACCESS)[number];
 
 /** Lowercase letters, digits and hyphens: the key a bot gives a panel or card so making it again finds the same one. */
 export const PANEL_KEY = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -112,6 +130,8 @@ export interface PanelCard {
   building?: true;
   /** Its own automation is waiting (a usage limit, a budget, a computer that is off), and until when if known. */
   held?: { reason: string; until?: string };
+  /** Set by the server on a card with its own automation, never stored. */
+  updateAccess?: PanelUpdateAccess;
 }
 
 /** One past update of a card, newest first, at most `PANEL_LIMITS.historyPerCard`. Kept in `panels-history.json`. */

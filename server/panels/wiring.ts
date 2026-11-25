@@ -104,9 +104,11 @@ export function createPanels(deps: PanelsDeps) {
   };
   /** A card's own update run may reach its card's update route, which takes only its own card, once. */
   const mayReach = (threadId: string, route: string): boolean => route === CARD_UPDATE_ROUTE && cards.ownRun(threadId) !== null;
+  /** A card's own update run reads with its bot's own tools, each read-only (read-and-draft.ts). */
+  const readsOwnTools = (threadId: string): boolean => cards.ownRun(threadId) !== null;
   const sweeper = setInterval(() => { if (deps.enabled()) cards.sweep(); }, Math.min(PANEL_LIMITS.draftMs / 6, 600_000));
   sweeper.unref?.();
-  return { store, routes, toolRoutes, runNote, runChanged, runRefusal: cards.runRefusal, remindRun, quiet: cards.owns, mayReach, close: () => clearInterval(sweeper) };
+  return { store, routes, toolRoutes, runNote, runChanged, runRefusal: cards.runRefusal, remindRun, quiet: cards.owns, mayReach, readsOwnTools, close: () => clearInterval(sweeper) };
 }
 
 export type Panels = ReturnType<typeof createPanels>;

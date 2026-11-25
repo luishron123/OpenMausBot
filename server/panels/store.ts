@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { PANEL_CARD_SIZES, PANEL_FAILURE_CODES, PANEL_KEY, PANEL_LIMITS, PANEL_VISIBILITIES, PANELS_VERSION, type Panel, type PanelCard, type PanelCardSize, type PanelFailureCode, type PanelVisibility } from "../../shared/panels.ts";
+import { PANEL_CARD_SIZES, PANEL_FAILURE_CODES, PANEL_KEY, PANEL_LIMITS, PANEL_VISIBILITIES, PANELS_VERSION, type Panel, type PanelCard, type PanelCardSize, type PanelErrorBody, type PanelFailureCode, type PanelLimitErrorKey, type PanelVisibility } from "../../shared/panels.ts";
 import type { WidgetRoot } from "../../shared/widget.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { redactSecretsInText } from "../redact.ts";
@@ -105,7 +105,7 @@ export function writePanelsFile(file: string, panels: readonly Panel[]): void {
   writeFileAtomic(file, JSON.stringify({ version: PANELS_VERSION, panels: stored, ...(drafts.length ? { drafts } : {}) }, null, 2), { mode: 0o600 });
 }
 
-export type PanelsError = { ok: false; status: 400 | 404 | 409; error: string };
+export type PanelsError = { ok: false; status: 400 | 404 | 409; error: string; errorKey?: PanelLimitErrorKey };
 export type PanelsResult<T> = ({ ok: true } & T) | PanelsError;
 
 export interface PanelsChange {
@@ -143,7 +143,9 @@ export interface CardContent {
   text: string;
 }
 
-const fail = (status: PanelsError["status"], error: string): PanelsError => ({ ok: false, status, error });
+const fail = (status: PanelsError["status"], error: string, errorKey?: PanelLimitErrorKey): PanelsError => ({ ok: false, status, error, ...(errorKey ? { errorKey } : {}) });
+/** What a person's route sends for a refused result. */
+export const errorBody = (refused: Pick<PanelsError, "error" | "errorKey">): PanelErrorBody => ({ error: refused.error, ...(refused.errorKey ? { errorKey: refused.errorKey } : {}) });
 const byteLength = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8");
 const tooBig = (card: PanelCard) => byteLength(card) > PANEL_LIMITS.cardBytes;
 const TOO_BIG = `widget: this card is over ${PANEL_LIMITS.cardBytes / 1000} KB; show fewer rows or shorter text.`;
@@ -157,11 +159,14 @@ const setVisibility = (panel: Panel, visibility: PanelVisibility) => {
 const clip = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
 export const PANEL_FULL = `This panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Remove one first, or keep this card on another panel.`;
 const DRAFTS_FULL = `This panel already has ${PANEL_LIMITS.draftsPerPanel} tests going. Keep or close one first.`;
+type Refusal = Pick<PanelsError, "error" | "errorKey">;
+export const PANEL_FULL_REFUSAL: Refusal = { error: PANEL_FULL, errorKey: "panels.limit.panelFull" };
+const DRAFTS_REFUSAL: Refusal = { error: DRAFTS_FULL, errorKey: "panels.limit.drafts" };
 /** Why `panel` has no room for one more card like `card`; a draft takes a test's place, not a card's. */
-const noRoom = (panel: Panel, card: { draft?: true | null }): string | null => {
+const noRoom = (panel: Panel, card: { draft?: true | null }): Refusal | null => {
   const drafts = panel.cards.filter((one) => one.draft).length;
-  if (card.draft) return drafts >= PANEL_LIMITS.draftsPerPanel ? DRAFTS_FULL : null;
-  return panel.cards.length - drafts >= PANEL_LIMITS.cardsPerPanel ? PANEL_FULL : null;
+  if (card.draft) return drafts >= PANEL_LIMITS.draftsPerPanel ? DRAFTS_REFUSAL : null;
+  return panel.cards.length - drafts >= PANEL_LIMITS.cardsPerPanel ? PANEL_FULL_REFUSAL : null;
 };
 
 export interface PanelStoreOptions {
@@ -301,7 +306,7 @@ export function createPanelStore(options: PanelStoreOptions) {
         const at = now();
         const existing = input.key ? findCard(panel, { key: input.key }) : undefined;
         const full = existing ? null : noRoom(panel, { draft: input.extra?.draft });
-        if (full) return fail(409, full === PANEL_FULL ? `This panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Replace one by its key, or make another panel.` : full);
+        if (full) return fail(409, full === PANEL_FULL_REFUSAL ? `This panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Replace one by its key, or make another panel.` : full.error, full.errorKey);
         const card: PanelCard = {
           id: existing?.id ?? newId("crd"), ...(input.key ? { key: input.key } : {}), title: input.title,
           size: input.size ?? existing?.size ?? "s", position: existing?.position ?? nextPosition(panel.cards),
@@ -397,7 +402,7 @@ export function createPanelStore(options: PanelStoreOptions) {
         if (!card) return fail(404, "No such card.");
         const draft = extra && Object.hasOwn(extra, "draft") ? extra.draft : card.draft;
         const full = noRoom(to, { draft });
-        if (full) return fail(409, full);
+        if (full) return fail(409, full.error, full.errorKey);
         from.cards.splice(from.cards.indexOf(card), 1);
         if (card.key && findCard(to, { key: card.key })) card.key = freeCardKey(to, card.key);
         card.position = nextPosition(to.cards);
@@ -419,7 +424,7 @@ export function createPanelStore(options: PanelStoreOptions) {
         if (!panel || !card) return fail(404, "No such card.");
         if (!card.draft) return { ok: true, panel, card, change: { panelId, botId: panel.createdBy.botId } };
         const full = noRoom(panel, {});
-        if (full) return fail(409, full);
+        if (full) return fail(409, full.error, full.errorKey);
         applyExtra(card, { draft: null, draftAt: null });
         return { ok: true, panel, card, change: touched(panel, now()) };
       });
@@ -465,7 +470,7 @@ export function createPanelStore(options: PanelStoreOptions) {
         if (findCard(panel, { cardId: card.id })) return fail(409, "That card is already here.");
         if (card.key && findCard(panel, { key: card.key })) return fail(409, `Another card has the key ${card.key} now.`);
         const full = noRoom(panel, card);
-        if (full) return fail(409, full);
+        if (full) return fail(409, full.error, full.errorKey);
         if (tooBig(card)) return fail(400, TOO_BIG);
         panel.cards.push(card);
         panel.cards.sort((a, b) => a.position - b.position);

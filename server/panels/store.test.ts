@@ -130,7 +130,7 @@ describe("panels.json", () => {
     const { panel } = made(store.create({ title: "Daily sales", createdBy: author }));
     expect(store.updateCard(panel.id, { key: "nope" }, { title: "x", botId: "scout" })).toMatchObject({ ok: false, status: 404, error: expect.stringContaining(`{"panel_id":"${panel.id}"}`) });
     for (let index = 0; index < PANEL_LIMITS.cardsPerPanel; index += 1) made(store.setCard(panel.id, { title: `Card ${index}`, botId: "scout" }));
-    expect(store.setCard(panel.id, { title: "One more", botId: "scout" })).toMatchObject({ ok: false, status: 409 });
+    expect(store.setCard(panel.id, { title: "One more", botId: "scout" })).toMatchObject({ ok: false, status: 409, errorKey: "panels.limit.panelFull" });
     const { panel: other } = made(store.create({ title: "Other", createdBy: author }));
     const huge = { widget: widget("x".repeat(PANEL_LIMITS.cardBytes)), text: "x" };
     expect(store.setCard(other.id, { title: "Huge", content: huge, botId: "scout" })).toMatchObject({ ok: false, status: 400, error: expect.stringContaining("KB") });
@@ -215,7 +215,7 @@ describe("cards beyond one panel", () => {
     expect(readPanelsFile(file).panels[0]!.cards.map((card) => [card.key, card.draft ?? false])).toEqual([["kept", false], ["test", true]]);
     for (let more = 1; more < PANEL_LIMITS.cardsPerPanel; more++) made(store.setCard(panel.id, { key: `c${more}`, title: `C${more}`, content: content("1"), botId: "scout" }));
     const test = store.get(panel.id)!.cards.find((card) => card.draft)!;
-    expect(store.keepDraft(panel.id, test.id)).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("Remove one first") });
+    expect(store.keepDraft(panel.id, test.id)).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("Remove one first"), errorKey: "panels.limit.panelFull" });
     made(store.removeCard(panel.id, store.get(panel.id)!.cards.find((card) => card.key === "c1")!.id));
     expect(made(store.keepDraft(panel.id, test.id)).card.draft).toBeUndefined();
     expect(JSON.parse(readFileSync(file, "utf8")).drafts).toBeUndefined();
