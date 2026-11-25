@@ -48,7 +48,7 @@ function fakeRoutines(routines: Routine[], runs: RoutineRun[] = []) {
   return { manager, started };
 }
 
-function setup(routines: Routine[], runs: RoutineRun[] = [], enabled = true, turnSees?: (caller: { botId: string }, panel: { createdBy: { botId: string } }) => boolean) {
+function setup(routines: Routine[], runs: RoutineRun[] = [], enabled = true, turnSees?: (caller: { botId: string }, panel: { createdBy: { botId: string } }, need?: "see" | "change") => boolean) {
   const dataDir = mkdtempSync(join(tmpdir(), "omb-panels-auto-"));
   dirs.push(dataDir);
   let tick = 0;
@@ -164,5 +164,24 @@ it("will not link a routine to a panel this turn may not see", async () => {
   const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}${PANEL_LINK_PATH}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ panel_id: "daily-sales", routine_id: "mine" }) });
   expect(res.status).toBe(404);
   expect(((await res.json()) as { error: string }).error).toContain("No panel daily-sales");
+  expect(routines[0]!.panelId).toBeUndefined();
+});
+
+it("will not link a routine to a panel this turn may only see", async () => {
+  const routines = [routine("mine", { botId: "rival" })];
+  const { automations } = setup(routines, [], true, (caller, panel, need) => need !== "change" || panel.createdBy.botId === caller.botId);
+  const route = automations.linkRoute({ botId: "rival", threadId: "t2" });
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (!await dispatchRoutes([route], { req, res, url, path: url.pathname, method: req.method ?? "GET", auth, json, readBody })) json(res, 404, { passed: true });
+  });
+  servers.push(server);
+  await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+  const link = (body: unknown) => fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}${PANEL_LINK_PATH}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  for (const body of [{ panel_id: "daily-sales", routine_id: "mine" }, { panel_id: "daily-sales" }]) {
+    const res = await link(body);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toContain("can be read from this conversation but not changed");
+  }
   expect(routines[0]!.panelId).toBeUndefined();
 });

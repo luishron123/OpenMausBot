@@ -7,15 +7,17 @@ import { canonicalWidget } from "../chat-widgets.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { CardContent, PanelStore } from "./store.ts";
+import type { PanelTurnAccess } from "./turn-access.ts";
 
 export const PANEL_TOOL_PATH = "/api/internal/panels";
 
 export interface PanelToolDeps {
   store: PanelStore;
   enabled(): boolean;
-  /** Whether this turn may see (and so change) the panel, as the person behind its conversation could; a panel it may not
-   * see answers as one that does not exist. Without it every panel is seen, as on a server one person uses. */
-  sees?(caller: PanelCaller, panel: Panel): boolean;
+  /** Whether this turn may see the panel, or with "change" change it, as the person behind its conversation could; a panel
+   * it may not see answers as one that does not exist, one it may only see refuses the change. Without it every panel is
+   * seen and changed, as on a server one person uses. */
+  sees?: PanelTurnAccess;
 }
 
 export interface PanelCaller {
@@ -79,11 +81,13 @@ function content(input: { widget: Record<string, unknown>; fallback_text?: strin
 export function createPanelToolRoutes(deps: PanelToolDeps) {
   const { store } = deps;
   const missing = (ref: string) => `No panel ${ref}. Call list_panels for the ids, or create_panel first.`;
+  const readOnly = (panel: Panel) => `Panel ${panel.id} can be read from this conversation but not changed: only people who can chat with the bot that made it (${panel.createdBy.botId}) may change it. Report in chat instead, or make your own panel with create_panel.`;
 
   return (caller: PanelCaller): RouteHandler => async ({ req, res, path, method, json, readBody }) => {
     if (!path.startsWith(`${PANEL_TOOL_PATH}/`)) return PASS;
     const seen = (panel: Panel | undefined) => (panel && (deps.sees?.(caller, panel) ?? true) ? panel : undefined);
     const find = (ref: string) => seen(store.get(ref)) ?? seen(store.byKey(ref));
+    const changes = (panel: Panel) => deps.sees?.(caller, panel, "change") ?? true;
     if (method !== "POST") return json(res, 405, { error: "Use POST." });
     if (!deps.enabled()) return json(res, 404, { error: "Panels are turned off on this computer. Show the result in chat instead." });
     const raw = await readBody(req);
@@ -116,6 +120,7 @@ export function createPanelToolRoutes(deps: PanelToolDeps) {
         if (!sent) return;
         const taken = sent.key ? store.byKey(sent.key) : undefined;
         if (taken && !seen(taken)) return failed(409, `key: "${sent.key}" is taken by a panel this conversation cannot see. Pick another key.`);
+        if (taken && !changes(taken)) return failed(403, readOnly(taken));
         const made = store.create({ title: sent.title, ...(sent.about ? { about: sent.about } : {}), ...(sent.key ? { key: sent.key } : {}), createdBy: { botId: caller.botId, threadId: caller.threadId } });
         if (!made.ok) return failed(made.status, made.error);
         const { panel } = made;
@@ -129,6 +134,7 @@ export function createPanelToolRoutes(deps: PanelToolDeps) {
         if (!sent) return;
         const panel = find(sent.panel_id);
         if (!panel) return failed(404, missing(sent.panel_id));
+        if (!changes(panel)) return failed(403, readOnly(panel));
         const scrubbed = content(sent);
         if (!scrubbed.ok) return failed(400, scrubbed.error);
         const set = store.setCard(panel.id, { ...(sent.card_key ? { key: sent.card_key } : {}), title: sent.title, ...(sent.size ? { size: sent.size } : {}), content: scrubbed.content, botId: caller.botId });
@@ -149,6 +155,7 @@ export function createPanelToolRoutes(deps: PanelToolDeps) {
         if (sent.widget && sent.failed !== undefined) return failed(400, "Send widget when you have new content, or failed when you could not get it; not both.");
         const panel = find(sent.panel_id);
         if (!panel) return failed(404, missing(sent.panel_id));
+        if (!changes(panel)) return failed(403, readOnly(panel));
         const scrubbed = sent.widget ? content({ widget: sent.widget, ...(sent.fallback_text !== undefined ? { fallback_text: sent.fallback_text } : {}) }) : null;
         if (scrubbed && !scrubbed.ok) return failed(400, scrubbed.error);
         const reason = sent.failed !== undefined ? redactSecretsInText(sent.failed) : undefined;

@@ -1,6 +1,6 @@
 // Panels as the server runs them: the store, the person's routes, the bots' tool routes and a `panels.changed` frame for
 // every change.
-import type { Panel, PanelsChangedFrame } from "../../shared/panels.ts";
+import type { PanelsChangedFrame } from "../../shared/panels.ts";
 import type { RoutineRun } from "../routines.ts";
 import { dispatchRoutes, PASS, type RouteHandler } from "../routes/table.ts";
 import { createPanelAutomations, type PanelRoutines } from "./automations.ts";
@@ -9,6 +9,7 @@ import type { BotAccessLevel } from "../../shared/bot-access.ts";
 import { createPanelRoutes } from "./routes.ts";
 import { createPanelStore } from "./store.ts";
 import { createPanelToolRoutes, type PanelCaller } from "./tools.ts";
+import type { PanelTurnAccess } from "./turn-access.ts";
 
 export interface PanelsDeps {
   dataDir: string;
@@ -20,7 +21,7 @@ export interface PanelsDeps {
   routines?(): PanelRoutines | null;
   personStarted?(auth: RequestAuth, run: RoutineRun): void;
   /** Whether a bot's turn may see a panel (turn-access.ts); without it every turn sees every panel. */
-  turnSees?(caller: PanelCaller, panel: Panel): boolean;
+  turnSees?: PanelTurnAccess;
 }
 
 export function createPanels(deps: PanelsDeps) {

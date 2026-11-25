@@ -10,6 +10,7 @@ import type { Routine, RoutineManager, RoutineRun } from "../routines.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { PanelStore } from "./store.ts";
 import { PANEL_TOOL_PATH, type PanelCaller } from "./tools.ts";
+import type { PanelTurnAccess } from "./turn-access.ts";
 
 export type PanelRoutines = Pick<RoutineManager, "listRoutines" | "listRuns" | "update" | "runNow">;
 
@@ -25,7 +26,7 @@ export interface PanelAutomationDeps {
   /** Told about a run this person started, as the person's own run-now route is. */
   personStarted?(auth: RequestAuth, run: RoutineRun): void;
   /** Whether this turn may see the panel (tools.ts `sees`); a panel it may not see cannot be linked, as if it did not exist. */
-  turnSees?(caller: PanelCaller, panel: Panel): boolean;
+  turnSees?: PanelTurnAccess;
 }
 
 const GOING = new Set(["queued", "running", "waiting"]);
@@ -108,6 +109,9 @@ export function createPanelAutomations(deps: PanelAutomationDeps) {
     const seen = (one: Panel | undefined) => (one && (deps.turnSees?.(caller, one) ?? true) ? one : undefined);
     const panel = sent.panel_id ? seen(store.get(sent.panel_id)) ?? seen(store.byKey(sent.panel_id)) ?? null : null;
     if (sent.panel_id && !panel) return json(res, 404, { error: `No panel ${sent.panel_id}. Call list_panels for the ids, or create_panel first.` });
+    if (panel && !(deps.turnSees?.(caller, panel, "change") ?? true)) {
+      return json(res, 403, { error: `Panel ${panel.id} can be read from this conversation but not changed, so no automation of yours can keep it: only people who can chat with the bot that made it (${panel.createdBy.botId}) may. Leave out panel_id and report in chat, or make your own panel with create_panel.` });
+    }
     if (!panel && sent.card_key) return json(res, 400, { error: "card_key needs panel_id." });
     if (!sent.routine_id) return json(res, 200, { text: `Panel ${panel?.id ?? "(none)"} can be linked.` });
     const manager = deps.routines();

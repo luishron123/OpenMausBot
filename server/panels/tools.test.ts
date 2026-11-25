@@ -134,6 +134,28 @@ it("treats a panel this turn may not see as one that does not exist, to read and
   expect((await tool("list", {})).body.text).not.toContain(made.panel.id);
 });
 
+it("lets a turn that may only see a panel list and read it, but refuses every change with a clear reason", async () => {
+  const { tool, store } = await serve("rival", (caller, panel, need) => need !== "change" || panel.createdBy.botId === caller.botId);
+  const made = store.create({ title: "Payroll", key: "payroll", createdBy: { botId: "scout", threadId: "t-mira" } });
+  if (!made.ok) throw new Error(made.error);
+  const set = store.setCard(made.panel.id, { key: "total", title: "Total", botId: "scout" });
+  if (!set.ok) throw new Error(set.error);
+  const before = JSON.stringify(store.get(made.panel.id));
+  expect((await tool("list", {})).body.text).toContain(made.panel.id);
+  expect((await tool("list", { panel_id: "payroll" })).body.text).toContain('"Total"');
+  const refused = { status: 403, body: { error: expect.stringContaining(`Panel ${made.panel.id} can be read from this conversation but not changed`) } };
+  for (const ref of [made.panel.id, "payroll"]) {
+    expect(await tool("set-card", { panel_id: ref, card_key: "total", title: "Total", widget: widget("$0") })).toMatchObject(refused);
+    expect(await tool("set-card", { panel_id: ref, card_key: "new", title: "New", widget: widget("$0") })).toMatchObject(refused);
+    expect(await tool("update-card", { panel_id: ref, card_key: "total", failed: "x" })).toMatchObject(refused);
+    expect(await tool("update-card", { panel_id: ref, card_key: "total", title: "Mine now" })).toMatchObject(refused);
+  }
+  expect(await tool("create", { title: "Payroll", key: "payroll" })).toMatchObject(refused);
+  expect(JSON.stringify(store.get(made.panel.id))).toBe(before);
+  const own = await tool("create", { title: "Mine", key: "mine" });
+  expect((await tool("set-card", { panel_id: own.body.panelId, card_key: "a", title: "A", widget: widget("1") })).status).toBe(200);
+});
+
 it("masks a secret in a failure's reason before it is stored, and tells the bot", async () => {
   const { tool, store } = await serve();
   const { panelId } = (await tool("create", { title: "Daily sales" })).body;
