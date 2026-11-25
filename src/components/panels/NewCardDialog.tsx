@@ -75,6 +75,8 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
   const suggestions = useSuggestions(botId);
   const estimate = useEstimate(botId, schedule);
   const field = useRef<HTMLTextAreaElement>(null);
+  const said = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (problem) said.current?.scrollIntoView?.({ block: "nearest" }); }, [problem]);
   const kept = useRef(false);
   const live = useRef<Draft | null>(null);
   live.current = draft;
@@ -271,7 +273,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
           {!tested && <p className="text-[12px] leading-4 text-ink-tertiary">{t("panels.new.changedSinceTest")}</p>}
         </section>
       )}
-      {problem && <p role="alert" className="mt-3 text-[13px] text-danger">{problem}</p>}
+      {problem && <p ref={said} role="alert" className="mt-3 text-[13px] text-danger">{problem}</p>}
       <button type="button" data-panel-new-pin onClick={() => setPinning(true)} className="ui-button ui-button-sm ui-button-ghost mx-auto mt-4 inline-flex items-center gap-1.5">
         <Pin size={14} aria-hidden="true" />
         {t("panels.new.pinInstead")}
