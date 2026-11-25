@@ -2102,6 +2102,14 @@
             "type": "boolean",
             "description": "app_event, webhook or schedule: each run continues the last run's conversation."
           },
+          "panel_id": {
+            "type": "string",
+            "description": "Schedules: the panel (id or key) its runs keep current instead of reporting in chat; \"\" unlinks."
+          },
+          "card_key": {
+            "type": "string",
+            "description": "With panel_id: its own card's key."
+          },
           "continuity": {
             "type": "boolean",
             "description": "Schedules: each run gets the last run's report."

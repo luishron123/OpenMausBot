@@ -1,6 +1,7 @@
 // A routine as a person, a bot or an import asked for it, checked and cleaned before RoutineManager keeps it.
 import { approvalModeFor, type ApprovalMode } from "../shared/approval-mode.ts";
 import { runsOnce } from "../shared/limit-reset.ts";
+import { PANEL_KEY } from "../shared/panels.ts";
 import { cleanAttachments, cleanTimeoutMinutes } from "./routine-attachments.ts";
 import { loadChecks, loadModelSelection } from "./routine-load.ts";
 import { cleanSchedule } from "./routine-schedules.ts";
@@ -79,6 +80,9 @@ export function sanitizeInput(input: RoutineInput, after: number): Omit<Routine,
   }
   const sameConversation = input.sameConversation === true;
   if (sameConversation && target === "room-goal") throw new Error("Room goals do not keep one conversation");
+  const panelId = input.panelId || undefined, cardKey = panelId ? input.cardKey || undefined : undefined;
+  if (panelId && (target === "room-goal" || !/^[\w-]{1,100}$/.test(panelId))) throw new Error("Only a bot's own automation keeps a panel, named by its panel id");
+  if (cardKey && !PANEL_KEY.test(cardKey)) throw new Error("A card key is lowercase letters, digits and dashes");
   const modelSelection = input.modelSelection == null ? undefined : loadModelSelection(input.modelSelection);
   if (input.modelSelection != null && !modelSelection) throw new Error("Choose a model: an engine, a model id, and an effort level or a variant, not both");
   if (modelSelection && target === "room-goal") throw new Error("Room goals run on their bots' own models");
@@ -105,6 +109,8 @@ export function sanitizeInput(input: RoutineInput, after: number): Omit<Routine,
     attachments,
     ...(continuity ? { continuity: true } : {}),
     ...(sameConversation ? { sameConversation: true } : {}),
+    ...(panelId ? { panelId } : {}),
+    ...(cardKey ? { cardKey } : {}),
     ...(modelSelection ? { modelSelection } : {}),
     ...(input.overlap === "queue" ? { overlap: "queue" as const } : {}),
     ...(input.runOnStartup === true && !runsOnce(schedule) ? { runOnStartup: true } : {}),
