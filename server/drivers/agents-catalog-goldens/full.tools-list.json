@@ -446,6 +446,139 @@
       }
     },
     {
+      "name": "list_panels",
+      "description": "List the panels, or with panel_id one panel's cards.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "panel_id": {
+            "type": "string",
+            "description": "The panel's id or key."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_panel",
+      "description": "Make a panel: cards you keep up to date, for numbers the person checks again. A key makes it idempotent. For a report that must stay current, also create an automation with panel_id.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "about": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "A stable name, e.g. \"daily-sales\"."
+          }
+        },
+        "required": [
+          "title"
+        ]
+      }
+    },
+    {
+      "name": "set_panel_widget",
+      "description": "Add a card to a panel, or replace the one with this card_key.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "panel_id": {
+            "type": "string",
+            "description": "The panel's id or key."
+          },
+          "card_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "A stable name, e.g. \"daily-sales\"."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "s",
+              "m",
+              "l"
+            ],
+            "description": "Width; s by default."
+          },
+          "widget": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "One JSON tree like show_widget's, without buttons or forms."
+          },
+          "fallback_text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "panel_id",
+          "title",
+          "widget"
+        ]
+      }
+    },
+    {
+      "name": "update_panel_widget",
+      "description": "Change one card (card_id or card_key). If you could not get fresh data, send failed with the reason instead of widget; the card keeps its last content.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "panel_id": {
+            "type": "string",
+            "description": "The panel's id or key."
+          },
+          "card_id": {
+            "type": "string"
+          },
+          "card_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "A stable name, e.g. \"daily-sales\"."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "s",
+              "m",
+              "l"
+            ],
+            "description": "Width; s by default."
+          },
+          "widget": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "One JSON tree like show_widget's, without buttons or forms."
+          },
+          "fallback_text": {
+            "type": "string"
+          },
+          "failed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "panel_id"
+        ]
+      }
+    },
+    {
       "name": "start_thread",
       "description": "Open a separate job on yourself: one conversation with its own history and its own run, shown to the person as a row under you, without switching the person's selected conversation. Use it only when the user requests independent jobs (for example one review per pull request, \"review each pull request\" — one thread per pull request) instead of doing them inside this conversation, or a second opinion from another model (model_selection from list_models, report_back true). The title becomes the row's name, so make it short and specific, and write it as #Title when you mention it to the person; give complete instructions, since the run will not see this conversation. You can open at most five per turn; a self-opened job cannot open more jobs. This is not a teammate handoff: use coordinate_bots for teammates (thread \"new\" opens a fresh thread on them) and their automatic replies. If a call is refused, do not retry it: say what you still wanted opened.",
       "inputSchema": {
