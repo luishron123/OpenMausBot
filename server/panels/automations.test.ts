@@ -48,7 +48,7 @@ function fakeRoutines(routines: Routine[], runs: RoutineRun[] = []) {
   return { manager, started };
 }
 
-function setup(routines: Routine[], runs: RoutineRun[] = [], enabled = true) {
+function setup(routines: Routine[], runs: RoutineRun[] = [], enabled = true, turnSees?: (caller: { botId: string }, panel: { createdBy: { botId: string } }) => boolean) {
   const dataDir = mkdtempSync(join(tmpdir(), "omb-panels-auto-"));
   dirs.push(dataDir);
   let tick = 0;
@@ -59,7 +59,7 @@ function setup(routines: Routine[], runs: RoutineRun[] = [], enabled = true) {
   const personal: string[] = [];
   const automations = createPanelAutomations({
     store, enabled: () => enabled, routines: () => fake.manager,
-    sees: (_auth, botId) => botId !== "hidden", personStarted: (_auth, run) => personal.push(run.id),
+    sees: (_auth, botId) => botId !== "hidden", personStarted: (_auth, run) => personal.push(run.id), ...(turnSees ? { turnSees } : {}),
   });
   return { store, panel: made.panel, automations, started: fake.started, personal };
 }
@@ -133,5 +133,36 @@ it("links a bot's own routine to a panel by id or key, unlinks it, and refuses o
   expect((await post({ panel_id: "daily-sales", routine_id: "theirs" })).status).toBe(404);
   expect(routines[1]!.panelId).toBeUndefined();
   expect(await post({ panel_id: "", routine_id: "mine" })).toMatchObject({ status: 200, body: { text: expect.stringContaining("no longer keeps a panel") } });
+  expect(routines[0]!.panelId).toBeUndefined();
+});
+
+it("names a linked routine's panel once its run has ended, and nothing while it runs or for another routine", () => {
+  const routines = [routine("a"), routine("b")];
+  const { panel, automations } = setup(routines);
+  routines[0]!.panelId = panel.id;
+  const run = (routineId: string, status: string) => ({ id: `r-${routineId}`, routineId, status }) as RoutineRun;
+  for (const status of ["queued", "running", "waiting"]) expect(automations.runEnded(run("a", status))).toBeNull();
+  for (const status of ["completed", "failed", "skipped"]) expect(automations.runEnded(run("a", status))).toEqual({ panelId: panel.id, botId: "scout" });
+  expect(automations.runEnded(run("b", "completed"))).toBeNull();
+  expect(automations.runEnded(run("gone", "completed"))).toBeNull();
+  routines[0]!.panelId = "pnl_removed";
+  expect(automations.runEnded(run("a", "completed"))).toBeNull();
+  const off = setup([routine("a")], [], false);
+  expect(off.automations.runEnded(run("a", "completed"))).toBeNull();
+});
+
+it("will not link a routine to a panel this turn may not see", async () => {
+  const routines = [routine("mine", { botId: "rival" })];
+  const { automations } = setup(routines, [], true, (caller, panel) => panel.createdBy.botId === caller.botId);
+  const route = automations.linkRoute({ botId: "rival", threadId: "t2" });
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (!await dispatchRoutes([route], { req, res, url, path: url.pathname, method: req.method ?? "GET", auth, json, readBody })) json(res, 404, { passed: true });
+  });
+  servers.push(server);
+  await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+  const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}${PANEL_LINK_PATH}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ panel_id: "daily-sales", routine_id: "mine" }) });
+  expect(res.status).toBe(404);
+  expect(((await res.json()) as { error: string }).error).toContain("No panel daily-sales");
   expect(routines[0]!.panelId).toBeUndefined();
 });

@@ -9,7 +9,7 @@ import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { dispatchRoutes } from "../routes/table.ts";
 import { createPanelStore } from "./store.ts";
-import { createPanelToolRoutes } from "./tools.ts";
+import { createPanelToolRoutes, type PanelToolDeps } from "./tools.ts";
 
 const servers: Server[] = [];
 const dirs: string[] = [];
@@ -18,12 +18,12 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-async function serve(botId = "scout") {
+async function serve(botId = "scout", sees?: PanelToolDeps["sees"]) {
   const dataDir = mkdtempSync(join(tmpdir(), "omb-panels-tools-"));
   dirs.push(dataDir);
   const store = createPanelStore({ dataDir });
   let enabled = true;
-  const routes = createPanelToolRoutes({ store, enabled: () => enabled });
+  const routes = createPanelToolRoutes({ store, enabled: () => enabled, ...(sees ? { sees } : {}) });
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const auth = { kind: "internal", scopes: [] } as unknown as RequestAuth;
@@ -109,4 +109,48 @@ it("answers that panels are off, and leaves other routes alone", async () => {
   turn(false);
   expect(await tool("list", {})).toEqual({ status: 404, body: { error: "Panels are turned off on this computer. Show the result in chat instead." } });
   expect(await (await fetch(`${base}/api/internal/other`, { method: "POST" })).json()).toEqual({ passed: true });
+});
+
+it("treats a panel this turn may not see as one that does not exist, to read and to write", async () => {
+  // Another person's bot: it sees only panels its own bot made.
+  const { tool, store } = await serve("rival", (caller, panel) => panel.createdBy.botId === caller.botId);
+  const made = store.create({ title: "Payroll", key: "payroll", createdBy: { botId: "scout", threadId: "t-mira" } });
+  if (!made.ok) throw new Error(made.error);
+  const set = store.setCard(made.panel.id, { key: "total", title: "Total", botId: "scout" });
+  if (!set.ok) throw new Error(set.error);
+  const before = JSON.stringify(store.get(made.panel.id));
+  expect((await tool("list", {})).body.text).toBe("There are no panels yet. Make one with create_panel.");
+  for (const ref of [made.panel.id, "payroll"]) {
+    expect(await tool("list", { panel_id: ref })).toEqual({ status: 404, body: { error: `No panel ${ref}. Call list_panels for the ids, or create_panel first.` } });
+    expect((await tool("set-card", { panel_id: ref, card_key: "total", title: "Total", widget: widget("$0") })).status).toBe(404);
+    expect((await tool("update-card", { panel_id: ref, card_key: "total", failed: "x" })).status).toBe(404);
+    expect((await tool("update-card", { panel_id: ref, card_key: "total", title: "Mine now" })).status).toBe(404);
+  }
+  expect(await tool("create", { title: "Payroll", key: "payroll" })).toMatchObject({ status: 409, body: { error: expect.stringContaining("Pick another key") } });
+  expect(JSON.stringify(store.get(made.panel.id))).toBe(before);
+  expect(store.list()).toHaveLength(1);
+  const own = await tool("create", { title: "Mine", key: "mine" });
+  expect((await tool("list", {})).body.text).toContain(own.body.panelId);
+  expect((await tool("list", {})).body.text).not.toContain(made.panel.id);
+});
+
+it("masks a secret in a failure's reason before it is stored, and tells the bot", async () => {
+  const { tool, store } = await serve();
+  const { panelId } = (await tool("create", { title: "Daily sales" })).body;
+  await tool("set-card", { panel_id: panelId, card_key: "revenue", title: "Revenue", widget: widget("$4,210") });
+  const key = "sk-ant-api03-" + "c".repeat(40);
+  const bearer = "Bearer " + "eyJhbGciOiJIUzI1NiJ9." + "d".repeat(40);
+  const failed = await tool("update-card", { panel_id: panelId, card_key: "revenue", failed: `Shopify refused key ${key} with header Authorization: ${bearer}` });
+  expect(failed.status).toBe(200);
+  expect(failed.body.text).toContain("masked");
+  const card = store.get(panelId)!.cards[0]!;
+  expect(card).toMatchObject({ status: "failed", failure: expect.stringContaining("Shopify refused key") });
+  expect(card.failure).not.toContain(key);
+  expect(card.failure).not.toContain("d".repeat(40));
+  expect((await tool("list", { panel_id: panelId })).body.text).not.toContain(key);
+  // The store masks on its own too, for any other caller.
+  const direct = store.updateCard(panelId, { key: "revenue" }, { failed: `token ${key}`, botId: "scout" });
+  expect(direct.ok && direct.card.failure).not.toContain(key);
+  const plain = await tool("update-card", { panel_id: panelId, card_key: "revenue", failed: "Shopify did not answer." });
+  expect(plain.body.text).not.toContain("masked");
 });

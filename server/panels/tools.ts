@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { PANEL_CARD_SIZES, PANEL_KEY, PANEL_LIMITS, type Panel, type PanelCard } from "../../shared/panels.ts";
 import { canonicalWidget } from "../chat-widgets.ts";
+import { redactSecretsInText } from "../redact.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { CardContent, PanelStore } from "./store.ts";
 
@@ -12,6 +13,9 @@ export const PANEL_TOOL_PATH = "/api/internal/panels";
 export interface PanelToolDeps {
   store: PanelStore;
   enabled(): boolean;
+  /** Whether this turn may see (and so change) the panel, as the person behind its conversation could; a panel it may not
+   * see answers as one that does not exist. Without it every panel is seen, as on a server one person uses. */
+  sees?(caller: PanelCaller, panel: Panel): boolean;
 }
 
 export interface PanelCaller {
@@ -74,11 +78,12 @@ function content(input: { widget: Record<string, unknown>; fallback_text?: strin
 
 export function createPanelToolRoutes(deps: PanelToolDeps) {
   const { store } = deps;
-  const find = (ref: string) => store.get(ref) ?? store.byKey(ref);
   const missing = (ref: string) => `No panel ${ref}. Call list_panels for the ids, or create_panel first.`;
 
   return (caller: PanelCaller): RouteHandler => async ({ req, res, path, method, json, readBody }) => {
     if (!path.startsWith(`${PANEL_TOOL_PATH}/`)) return PASS;
+    const seen = (panel: Panel | undefined) => (panel && (deps.sees?.(caller, panel) ?? true) ? panel : undefined);
+    const find = (ref: string) => seen(store.get(ref)) ?? seen(store.byKey(ref));
     if (method !== "POST") return json(res, 405, { error: "Use POST." });
     if (!deps.enabled()) return json(res, 404, { error: "Panels are turned off on this computer. Show the result in chat instead." });
     const raw = await readBody(req);
@@ -95,7 +100,7 @@ export function createPanelToolRoutes(deps: PanelToolDeps) {
         const sent = read(listBody);
         if (!sent) return;
         if (!sent.panel_id) {
-          const panels = store.list();
+          const panels = store.list().filter((panel) => seen(panel));
           if (!panels.length) return json(res, 200, { text: "There are no panels yet. Make one with create_panel." });
           return json(res, 200, { text: `Panels, the most recently updated first:\n${panels.map(panelLine).join("\n")}` });
         }
@@ -109,6 +114,8 @@ export function createPanelToolRoutes(deps: PanelToolDeps) {
       case "create": {
         const sent = read(createBody);
         if (!sent) return;
+        const taken = sent.key ? store.byKey(sent.key) : undefined;
+        if (taken && !seen(taken)) return failed(409, `key: "${sent.key}" is taken by a panel this conversation cannot see. Pick another key.`);
         const made = store.create({ title: sent.title, ...(sent.about ? { about: sent.about } : {}), ...(sent.key ? { key: sent.key } : {}), createdBy: { botId: caller.botId, threadId: caller.threadId } });
         if (!made.ok) return failed(made.status, made.error);
         const { panel } = made;
@@ -144,13 +151,14 @@ export function createPanelToolRoutes(deps: PanelToolDeps) {
         if (!panel) return failed(404, missing(sent.panel_id));
         const scrubbed = sent.widget ? content({ widget: sent.widget, ...(sent.fallback_text !== undefined ? { fallback_text: sent.fallback_text } : {}) }) : null;
         if (scrubbed && !scrubbed.ok) return failed(400, scrubbed.error);
+        const reason = sent.failed !== undefined ? redactSecretsInText(sent.failed) : undefined;
         const updated = store.updateCard(panel.id, sent.card_id ? { cardId: sent.card_id } : { key: sent.card_key! }, {
           ...(sent.title !== undefined ? { title: sent.title } : {}), ...(sent.size ? { size: sent.size } : {}),
-          ...(scrubbed?.ok ? { content: scrubbed.content } : {}), ...(sent.failed !== undefined ? { failed: sent.failed } : {}), botId: caller.botId,
+          ...(scrubbed?.ok ? { content: scrubbed.content } : {}), ...(reason !== undefined ? { failed: reason } : {}), botId: caller.botId,
         });
         if (!updated.ok) return failed(updated.status, updated.error);
         const done = sent.failed !== undefined ? " as failed; it keeps its last content" : "";
-        return json(res, 200, { cardId: updated.card.id, text: `${sent.failed !== undefined ? "Marked" : "Updated"} card ${updated.card.id} on panel ${panel.id}${done}.${scrubbed?.ok && scrubbed.masked ? MASKED : ""}` });
+        return json(res, 200, { cardId: updated.card.id, text: `${sent.failed !== undefined ? "Marked" : "Updated"} card ${updated.card.id} on panel ${panel.id}${done}.${(scrubbed?.ok && scrubbed.masked) || reason !== sent.failed ? MASKED : ""}` });
       }
       default:
         return failed(404, "No such panel tool.");

@@ -10,6 +10,7 @@ import { z } from "zod";
 import { PANEL_CARD_SIZES, PANEL_KEY, PANEL_LIMITS, PANELS_VERSION, type Panel, type PanelCard, type PanelCardSize } from "../../shared/panels.ts";
 import type { WidgetRoot } from "../../shared/widget.ts";
 import { writeFileAtomic } from "../atomic.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 export const PANELS_FILE = "panels.json";
 
@@ -271,7 +272,8 @@ export function createPanelStore(options: PanelStoreOptions) {
         }
         if (input.failed !== undefined) {
           next.status = "failed";
-          next.failure = clip(input.failed, PANEL_LIMITS.failure);
+          // The card shows this sentence to everyone who sees the panel: it loses its secrets as a widget's text does.
+          next.failure = clip(redactSecretsInText(input.failed), PANEL_LIMITS.failure);
           next.failedAt = at;
         }
         if (tooBig(next)) return fail(400, TOO_BIG);
