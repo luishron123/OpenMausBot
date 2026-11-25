@@ -319,7 +319,7 @@ panel is running), `failed` (the last data dimmed, the reason in red) or
 an Undo; the panel's ⋯ menu renames it, opens the bot's conversation and
 deletes it, with an Undo on the list.
 
-With a server that has the `/api/panels` routes, launch as in
+With a server that has the panel routes (`server/panels/routes.ts`), launch as in
 [Launch](#launch), ask Pepper for a panel, then:
 
 ```sh
