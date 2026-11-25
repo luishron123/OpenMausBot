@@ -168,7 +168,7 @@ const keeps = (automation: PanelAutomation, card: Pick<PanelCard, "key" | "routi
   (card.routineId !== undefined && automation.routineId === card.routineId) || (card.key !== undefined && automation.cardKey === card.key);
 
 /** An automation for the whole panel: not tied to a card key, nor any card's own. */
-const panelWide = (panel: Pick<Panel, "cards">, automation: PanelAutomation) =>
+export const panelWide = (panel: Pick<Panel, "cards">, automation: PanelAutomation) =>
   !automation.cardKey && !panel.cards.some((card) => card.routineId === automation.routineId);
 
 /** A card is updating while an automation that keeps it runs: its own, or one that keeps the whole panel. */

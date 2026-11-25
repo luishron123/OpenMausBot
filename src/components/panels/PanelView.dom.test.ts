@@ -438,6 +438,15 @@ describe("what each card is doing", () => {
     await show();
     expect(order().map((id) => host.querySelector(`[data-panel-card="${id}"]`)!.getAttribute("data-panel-card-state"))).toEqual(["updating", "ok"]);
   });
+
+  it("lists in the header only the automations that keep the whole panel", async () => {
+    panels[0]!.cards = [card({ routineId: "own" })];
+    panels[0]!.automations = [automation({ routineId: "own", name: "Card's own" }), automation({ routineId: "wide", name: "Whole panel" })];
+    await show();
+    const list = host.querySelector('ul[aria-label="Automations that update this panel"]');
+    expect(list?.textContent).toContain("Whole panel");
+    expect(list?.textContent).not.toContain("Card's own");
+  });
 });
 
 describe("the card's side panel", () => {

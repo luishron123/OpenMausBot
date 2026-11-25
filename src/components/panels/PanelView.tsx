@@ -5,7 +5,7 @@ import { nextWhen } from "@/lib/automations";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
-import { refreshPanel, renamePanel, usePanel, type Panel, type PanelAutomation } from "@/lib/panels";
+import { panelWide, refreshPanel, renamePanel, usePanel, type Panel, type PanelAutomation } from "@/lib/panels";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openBot, openThread } from "@/state/thread-navigation";
 import { sameFields, useStoreDispatch, useStoreSelector } from "@/state/store-select";
@@ -115,6 +115,8 @@ export function PanelView({ panelId, onBack, onDelete }: { panelId: string; onBa
   useEffect(() => { if (missing) onBack(); }, [missing, onBack]);
 
   const maker = panel ? routing.bots.find((bot) => bot.id === panel.createdBy.botId) : undefined;
+  // Each card's own automation shows in its footer and side panel; the header keeps the ones for the whole panel.
+  const wide = panel ? (panel.automations ?? []).filter((automation) => panelWide(panel, automation)) : [];
   const opened = panel && openId ? placedCards(panel).find((card) => card.id === openId) : undefined;
   useEffect(() => { if (openId && panel && !opened) setOpenId(null); }, [openId, panel, opened]);
   useEffect(() => { if (organizing) setOpenId(null); }, [organizing]);
@@ -228,9 +230,9 @@ export function PanelView({ panelId, onBack, onDelete }: { panelId: string; onBa
                     <span aria-hidden="true">·</span>
                     <span>{t("panels.updated", { when: relativeTime(Date.parse(panel.updatedAt)) })}</span>
                   </p>
-                  {(panel.automations ?? []).length > 0 && (
+                  {wide.length > 0 && (
                     <ul aria-label={t("panels.automation.list")} className="mt-1 flex flex-col gap-2">
-                      {(panel.automations ?? []).map((automation) => <AutomationLine key={automation.routineId} panelId={panel.id} automation={automation} onPoll={refresh} />)}
+                      {wide.map((automation) => <AutomationLine key={automation.routineId} panelId={panel.id} automation={automation} onPoll={refresh} />)}
                     </ul>
                   )}
                   {problem && <p role="alert" className="text-[13px] text-danger">{problem}</p>}
