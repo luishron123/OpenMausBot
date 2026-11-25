@@ -478,6 +478,27 @@ it("makes a card's own routine read-only, keeps its answer out of every chat, an
   expect(harness.store.get(panelId)!.cards[0]).toMatchObject({ status: "failed", failure: ENGINE_FAILURE, failureCode: "engine" });
 });
 
+it("never counts a refusal of an older card routine toward the pause", async () => {
+  const harness = await serve();
+  const panelId = await salesPanel(harness);
+  await harness.tool("set-card", { panel_id: "daily-sales", card_key: "revenue", title: "Revenue", widget: widget("$1"), prompt: "Revenue", schedule: "hour" });
+  const routine = harness.routines[0]!;
+  const card = () => harness.store.get(panelId)!.cards[0]!;
+  const fail = (error?: string) => {
+    const run = harness.manager.runNow(routine.id)!;
+    if (error) run.error = error;
+    harness.end(run, "failed");
+  };
+
+  for (let failure = 1; failure < FAILURES_TO_PAUSE; failure++) fail();
+  fail(NOT_FENCED_FAILURE);
+  expect(card()).toMatchObject({ status: "failed", failure: NOT_FENCED_FAILURE, failureCode: "engine" });
+  expect(routine.enabled).toBe(true);
+  fail();
+  expect(routine.enabled).toBe(false);
+  expect(card()).toMatchObject({ failure: PAUSED_FAILURE, failureCode: "paused" });
+});
+
 it("reminds a card's own run once, after its turn settles, before it counts as no update", async () => {
   const continued: Array<{ runId: string; threadId: string; text: string }> = [];
   let busy = true;

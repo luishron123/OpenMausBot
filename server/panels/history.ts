@@ -46,9 +46,10 @@ export function createPanelHistory(options: { dataDir: string }) {
       update.costUsd = costUsd;
       write(cards);
     },
-    /** How many of the newest updates failed in a row. */
-    failuresInARow(cardId: string): number {
-      const updates = this.list(cardId);
+    /** How many of the newest updates failed in a row; an update `uncounted` says was no failure of the card's own is
+     * passed over, neither counted nor ending the row. */
+    failuresInARow(cardId: string, uncounted: (update: PanelCardUpdate) => boolean = () => false): number {
+      const updates = this.list(cardId).filter((one) => !uncounted(one));
       const ok = updates.findIndex((one) => one.status !== "failed");
       return ok < 0 ? updates.length : ok;
     },

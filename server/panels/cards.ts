@@ -232,7 +232,8 @@ export function createPanelCards(deps: PanelCardsDeps) {
     } else {
       return null;
     }
-    if (history.failuresInARow(card.id) < FAILURES_TO_PAUSE) return null;
+    // A run refused because its routine predates read-only cards is the build's doing, and the next run goes ahead.
+    if (history.failuresInARow(card.id, (update) => update.failure === NOT_FENCED_FAILURE) < FAILURES_TO_PAUSE) return null;
     const own = routineById(card.routineId);
     if (own?.enabled) {
       try { deps.routines()?.update(own.id, { enabled: false }); } catch { /* the card still says it failed */ }
