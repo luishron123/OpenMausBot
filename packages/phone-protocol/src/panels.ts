@@ -102,6 +102,9 @@ export interface PanelCard {
   schedule?: PanelSchedule;
   /** The card's own automation, made, changed and removed by the server with the card. */
   routineId?: string;
+  /** How the card's own automation runs: "fenced" read-only, or "bot" with the bot's usual access because its engine has no
+   * read-only mode. */
+  updateAccess?: "fenced" | "bot";
   /** The condition to alert on, in words, e.g. "falls 20% below yesterday". */
   alert?: string;
   /** The last alert an update raised, until the person clears it. */
