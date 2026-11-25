@@ -59,7 +59,9 @@ let blocks: PanelPinnableBlock[];
 let history: PanelCardUpdate[] = [];
 let suggestions: Record<string, PanelSuggestion[]> = {};
 let estimates: Record<string, PanelEstimate> = {};
-let keepRefusal = "";
+let keepRefusal: { error: string; errorKey?: string } | null = null;
+let testRefusal: { error: string; errorKey?: string } | null = null;
+let draftAccess: PanelCard["updateAccess"];
 const calls: Array<{ method: string; path: string; body?: unknown }> = [];
 let host: HTMLDivElement;
 let root: Root;
@@ -82,8 +84,9 @@ function server(path: string, method: string, body: Record<string, unknown> | un
     panel.cards.forEach((item) => { item.position = ids.indexOf(item.id); });
     return reply({ panel });
   }
+  if (parts[2] === "new" && testRefusal) return reply(testRefusal, 409);
   if (parts[2] === "new") {
-    const made = card({ id: "draft1", key: "orders-by-hour", title: (body!.title as string) || "Orders by hour", size: body!.size as PanelCard["size"], botId: body!.botId as string, widget: undefined, draft: true, position: 9 });
+    const made = card({ id: "draft1", key: "orders-by-hour", title: (body!.title as string) || "Orders by hour", size: body!.size as PanelCard["size"], botId: body!.botId as string, widget: undefined, draft: true, position: 9, ...(draftAccess ? { updateAccess: draftAccess } : {}) });
     panel.cards.push(made);
     return reply({ panel, card: made, routineId: "r9" }, 202);
   }
@@ -94,7 +97,7 @@ function server(path: string, method: string, body: Record<string, unknown> | un
   }
   if (parts[2] === "restore") { panel.cards.push(body!.card as PanelCard); return reply({ panel }); }
   const target = panel.cards.find((item) => item.id === parts[2])!;
-  if (parts[3] === "keep" && keepRefusal) return reply({ error: keepRefusal }, 409);
+  if (parts[3] === "keep" && keepRefusal) return reply(keepRefusal, 409);
   if (parts[3] === "keep") { delete target.draft; return reply({ panel }); }
   if (parts[3] === "history") return reply({ updates: history });
   if (parts[3] === "alert") { delete target.alertActive; return reply({ panel }); }
@@ -115,7 +118,9 @@ beforeEach(async () => {
   history = [];
   suggestions = {};
   estimates = {};
-  keepRefusal = "";
+  keepRefusal = null;
+  testRefusal = null;
+  draftAccess = undefined;
   blocks = [{ threadId: "t7", messageId: "m3", botId: "nova", title: "Weekly signups", at: ago(30), text: "312 this week" }];
   panels = [
     {
@@ -367,7 +372,7 @@ describe("New card", () => {
 
   it("tests at 24 cards, since a test card isn't counted, and says why Create was refused", async () => {
     panels[0]!.cards = Array.from({ length: 24 }, (_, position) => card({ id: `c${position}`, position }));
-    keepRefusal = "This panel already has 24 cards. Remove one first, or keep this card on another panel.";
+    keepRefusal = { error: "This panel already has 24 cards. Remove one first, or keep this card on another panel.", errorKey: "panels.limit.panelFull" };
     const dialog = await open();
     type(dialog.querySelector("textarea")!, "One more");
     expect(dialog.querySelector("[data-panel-new-full]")?.textContent).toBe("This panel already has 24 cards, the most it can hold. Remove one or add to another panel.");
@@ -386,16 +391,52 @@ describe("New card", () => {
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 
-  it("shows the server's reason when Create is refused for another limit", async () => {
-    keepRefusal = "There are already 60 cards that update by themselves. Choose Manual, or remove a scheduled card first.";
+  it("says a limit in the person's language when the server names it, and its own sentence when it doesn't", async () => {
+    keepRefusal = { error: "There are already 60 cards that update by themselves.", errorKey: "panels.limit.scheduled" };
     const dialog = await open();
     type(dialog.querySelector("textarea")!, "Refunds this week");
     act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
     await settle();
-    act(() => (dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement).click());
+    await (await import("@/lib/i18n")).loadLocale("pt-br");
+    const add = dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement;
+    act(() => add.click());
     await settle();
-    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe(keepRefusal);
-    expect((dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe("Você já tem 60 cartões com atualização agendada, o máximo. Deixe um para atualizar só quando pedir, ou remova um.");
+    expect(add.disabled).toBe(false);
+
+    keepRefusal = { error: "Something else the server said." };
+    act(() => add.click());
+    await settle();
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe("Something else the server said.");
+
+    testRefusal = { error: "This panel already has 4 cards being tested.", errorKey: "panels.limit.drafts" };
+    type(dialog.querySelector("textarea")!, "Refunds this month");
+    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
+    await settle();
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe("Este painel já tem 4 cartões de teste esperando. Tente de novo em alguns minutos.");
+  });
+
+  it("says under the preview when the bot updates with its usual access, and only for the bot it was tested with", async () => {
+    draftAccess = "bot";
+    const dialog = await open();
+    type(dialog.querySelector("textarea")!, "Orders per hour today");
+    expect(dialog.querySelector("[data-panel-access]")).toBeNull();
+    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
+    await settle();
+    expect(dialog.querySelector("[data-panel-access]")?.textContent).toBe("This bot updates it with its usual access (its AI has no read-only mode).");
+    choose([...dialog.querySelectorAll("select")].find((item) => item.getAttribute("aria-label") === "Bot that keeps it")!, "nova");
+    await settle();
+    expect(dialog.querySelector("[data-panel-access]")).toBeNull();
+  });
+
+  it("says nothing about access when the update runs fenced", async () => {
+    draftAccess = "fenced";
+    const dialog = await open();
+    type(dialog.querySelector("textarea")!, "Orders per hour today");
+    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
+    await settle();
+    expect(dialog.querySelector("[data-panel-new-preview] [data-panel-card]")).not.toBeNull();
+    expect(dialog.querySelector("[data-panel-access]")).toBeNull();
   });
 
   it("pins a block a bot already posted in a chat", async () => {
@@ -529,7 +570,15 @@ describe("the card's side panel", () => {
     expect(items[2]).toContain("Asked: show it as bars");
     expect(items[2]).not.toContain("$");
     expect(items[3]).toContain("The last update brought no new data");
+    expect(side.querySelector("[data-panel-access]")).toBeNull();
     expect(calls.some((call) => call.path === "/api/panels/p1/cards/c1/history")).toBe(true);
+  });
+
+  it("says when the bot updates the card with its usual access", async () => {
+    Object.assign(panels[0]!.cards[0]!, { routineId: "own", schedule: "hour", updateAccess: "bot" });
+    await (await import("@/lib/i18n")).loadLocale("pt-br");
+    const side = await openCard("c1");
+    expect(side.querySelector("[data-panel-access]")?.textContent).toBe("Este bot atualiza com o acesso normal dele (o motor não tem modo só leitura).");
   });
 
   it("refreshes now, sends a change, clears the alert, removes with Undo, and closes on Escape", async () => {

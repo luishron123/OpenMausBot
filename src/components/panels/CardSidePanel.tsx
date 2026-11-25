@@ -219,6 +219,7 @@ export function CardSidePanel({ panel, card, bots, onClose, onRemove }: {
             </span>
           </div>
           {card.prompt && <p dir="auto" className="text-[12px] leading-4 text-ink-tertiary">{t("panels.side.tracks", { prompt: card.prompt })}</p>}
+          {card.updateAccess === "bot" && <p data-panel-access className="text-[12px] leading-4 text-ink-tertiary">{t("panels.access.bot")}</p>}
         </Section>
 
         <Section title={t("panels.side.alertTitle")}>

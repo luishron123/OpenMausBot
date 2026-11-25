@@ -27,7 +27,20 @@ const label = (key: string) => t(key as Parameters<typeof t>[0]);
 
 type Draft = { cardId: string; with: string };
 
-const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback);
+const LIMIT_COUNTS = {
+  "panels.limit.panelFull": PANEL_LIMITS.cardsPerPanel,
+  "panels.limit.scheduled": PANEL_LIMITS.scheduledCards,
+  "panels.limit.drafts": PANEL_LIMITS.draftsPerPanel,
+} as const;
+
+function errorText(cause: unknown, fallback: string): string {
+  const key = cause instanceof ApiError ? cause.body?.errorKey : undefined;
+  if (typeof key === "string" && Object.hasOwn(LIMIT_COUNTS, key)) {
+    const limit = key as keyof typeof LIMIT_COUNTS;
+    return t(limit, { count: LIMIT_COUNTS[limit] });
+  }
+  return cause instanceof Error && cause.message ? cause.message : fallback;
+}
 
 /** What a bot suggests keeping track of, read again when the bot changes; empty when it has nothing to go on. */
 function useSuggestions(botId: string): PanelSuggestion[] {
@@ -127,8 +140,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
       onClose();
     } catch (cause) {
       setBusy(false);
-      const fullRefusal = full && cause instanceof ApiError && cause.status === 409;
-      setProblem(fullRefusal ? t("panels.limit.cards", { count: PANEL_LIMITS.cardsPerPanel }) : errorText(cause, t("panels.new.addFailed")));
+      setProblem(errorText(cause, t("panels.new.addFailed")));
     }
   };
 
@@ -250,7 +262,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
           />
         </label>
       </div>
-      {full && !problem && <p data-panel-new-full className="mt-3 text-[13px] leading-[18px] text-ink-secondary">{t("panels.limit.cards", { count: PANEL_LIMITS.cardsPerPanel })}</p>}
+      {full && !problem && <p data-panel-new-full className="mt-3 text-[13px] leading-[18px] text-ink-secondary">{t("panels.limit.panelFull", { count: PANEL_LIMITS.cardsPerPanel })}</p>}
       {draft && (
         <section aria-label={t("panels.new.preview")} data-panel-new-preview className="mt-4 flex flex-col gap-2">
           <h3 className="text-[12px] font-medium leading-4 text-ink-tertiary">{t("panels.new.preview")}</h3>
@@ -269,6 +281,9 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
               <LoaderCircle size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
               {t("panels.card.waiting")}
             </p>
+          )}
+          {draftCard?.updateAccess === "bot" && draftCard.botId === botId && (
+            <p data-panel-access className="text-[12px] leading-4 text-ink-tertiary">{t("panels.access.bot")}</p>
           )}
           {!tested && <p className="text-[12px] leading-4 text-ink-tertiary">{t("panels.new.changedSinceTest")}</p>}
         </section>
