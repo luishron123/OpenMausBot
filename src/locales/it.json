@@ -2473,6 +2473,7 @@
   "sidebar.connectionsToFinish": "Connessioni da completare in App → Server MCP: {count}",
   "sidebar.presetsImported": "Bot preset aggiunti a Nuovo bot: {count}",
   "sidebar.nav.teamMap": "Mappa del team",
+  "sidebar.nav.panels": "Pannelli",
   "sidebar.nav.automations": "Automazioni",
   "sidebar.nav.connectedApps": "App collegate",
   "sidebar.connectApps": "Connetti app",

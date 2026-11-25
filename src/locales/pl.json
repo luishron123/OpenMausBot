@@ -1812,6 +1812,7 @@
   "sidebar.connectionsToFinish": "Połączenia do dokończenia (Aplikacje → Serwery MCP): {count}",
   "sidebar.presetsImported": "Boty z ustawień wstępnych dodane do okna Nowy bot: {count}",
   "sidebar.nav.teamMap": "Mapa zespołu",
+  "sidebar.nav.panels": "Panele",
   "sidebar.nav.automations": "Automatyzacje",
   "sidebar.nav.connectedApps": "Połączone aplikacje",
   "sidebar.tools": "Narzędzia",

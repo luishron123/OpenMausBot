@@ -1386,6 +1386,7 @@
   "sidebar.connectionsToFinish": "Uygulamalar → MCP sunucuları bölümünde tamamlanacak bağlantılar: {count}",
   "sidebar.presetsImported": "Yeni bot bölümüne eklenen ön ayarlı botlar: {count}",
   "sidebar.nav.teamMap": "Ekip haritası",
+  "sidebar.nav.panels": "Paneller",
   "sidebar.nav.automations": "Otomasyonlar",
   "sidebar.nav.connectedApps": "Bağlı uygulamalar",
   "sidebar.tools": "Araçlar",

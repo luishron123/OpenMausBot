@@ -1386,6 +1386,7 @@
   "sidebar.connectionsToFinish": "Kết nối cần hoàn tất trong Ứng dụng → Máy chủ MCP: {count}",
   "sidebar.presetsImported": "Bot tạo sẵn đã thêm vào Bot mới: {count}",
   "sidebar.nav.teamMap": "Sơ đồ team",
+  "sidebar.nav.panels": "Bảng",
   "sidebar.nav.automations": "Tự động hóa",
   "sidebar.nav.connectedApps": "Ứng dụng đã kết nối",
   "sidebar.tools": "Công cụ",

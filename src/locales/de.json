@@ -928,6 +928,7 @@
   "sidebar.teamImportedMany": "{count} Bots hinzugefügt · vorhandene Bots und Chats bleiben",
   "sidebar.connectionsToFinish": "Offene Verbindungen unter Apps → MCP servers: {count}",
   "sidebar.nav.teamMap": "Teamkarte",
+  "sidebar.nav.panels": "Panels",
   "sidebar.nav.automations": "Automatisierungen",
   "sidebar.nav.connectedApps": "Verbundene Apps",
   "sidebar.tools": "Werkzeuge",

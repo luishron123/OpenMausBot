@@ -2046,6 +2046,7 @@
   "sidebar.connectionsToFinish": "「アプリ → MCP サーバー」で設定が必要な接続：{count} 件",
   "sidebar.presetsImported": "「新しいボット」に追加したプリセットボット：{count} 件",
   "sidebar.nav.teamMap": "チームマップ",
+  "sidebar.nav.panels": "パネル",
   "sidebar.nav.automations": "自動化",
   "sidebar.nav.connectedApps": "連携アプリ",
   "sidebar.connectApps": "アプリを接続",

@@ -12,6 +12,7 @@ import {
   HelpCircle,
   Keyboard,
   Laptop,
+  LayoutDashboard,
   LifeBuoy,
   Loader2,
   LogOut,
@@ -311,9 +312,10 @@ export function phoneDevicesItem(state: PhonePlaceState, place: string, onSelect
   };
 }
 
-export function toolMenuItems({ activeView, automationsNeedYou, onAutomations, onTeamMap, onFiles, onPublishedApps, onSkillBurgers, onTeamFiles, archived }: {
+export function toolMenuItems({ activeView, automationsNeedYou, onPanels, onAutomations, onTeamMap, onFiles, onPublishedApps, onSkillBurgers, onTeamFiles, archived }: {
   activeView: string;
   automationsNeedYou: boolean;
+  onPanels?: () => void;
   onAutomations: () => void;
   onTeamMap: () => void;
   /** set once My Cloud's files are ready to open */
@@ -325,6 +327,7 @@ export function toolMenuItems({ activeView, automationsNeedYou, onAutomations, o
   archived?: ArchivedBots;
 }): SidebarMenuItem[] {
   return [
+    ...(onPanels ? [{ key: "panels", label: t("sidebar.nav.panels"), icon: <LayoutDashboard size={16} />, active: activeView === "panels", onSelect: onPanels }] : []),
     { key: "automations", label: t("sidebar.nav.automations"), icon: <Zap size={16} />, active: activeView === "routines", attention: automationsNeedYou, onSelect: onAutomations },
     { key: "team-map", label: t("sidebar.nav.teamMap"), icon: <UsersRound size={16} />, active: activeView === "team-map", onSelect: onTeamMap },
     ...(onFiles ? [{ key: "files", label: t("sidebar.nav.files"), icon: <FolderOpen size={16} />, active: activeView === "files", onSelect: onFiles }] : []),
@@ -542,7 +545,7 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   const { state, dispatch } = useStore();
   const simple = account !== undefined;
   const [menuOpen, setMenuOpen] = useState(false);
-  const advancedMode = useAdvancedMode(), skillBurger = useFeature("skillBurger");
+  const advancedMode = useAdvancedMode(), skillBurger = useFeature("skillBurger"), panels = useFeature("panels");
   const automationsNeedYou = useAutomationsNeedYou();
   const planSnapshot = useCloudPlanSnapshot(usageBridge(state.config?.cloudHome === true) ?? (window.ogb?.remoteClient?.active ? undefined : window.ogb?.cloudPlan));
   const cloudUsage = cloudUsageSummary(planSnapshot);
@@ -608,6 +611,7 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
       tools: toolMenuItems({
         activeView: state.activeView,
         automationsNeedYou: account?.automationsNeedYou ?? automationsNeedYou,
+        onPanels: panels ? () => dispatch({ type: "showPanels" }) : undefined,
         onAutomations: () => dispatch({ type: "showRoutines", view: "list" }),
         onTeamMap: () => dispatch({ type: "showTeamMap" }),
         onFiles: filesReady ? () => dispatch({ type: "showFiles" }) : undefined,

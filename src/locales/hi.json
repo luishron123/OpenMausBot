@@ -732,6 +732,7 @@
   "sidebar.teamImportedMany": "{count} बॉट जोड़े गए · मौजूदा बॉट और चैट सुरक्षित हैं",
   "sidebar.connectionsToFinish": "ऐप्स → MCP servers में पूरे करने वाले कनेक्शन: {count}",
   "sidebar.nav.teamMap": "टीम मैप",
+  "sidebar.nav.panels": "पैनल",
   "sidebar.nav.automations": "स्वचालन",
   "sidebar.nav.connectedApps": "जुड़े हुए ऐप",
   "sidebar.tools": "टूल",

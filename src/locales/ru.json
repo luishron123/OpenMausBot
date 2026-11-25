@@ -1859,6 +1859,7 @@
   "sidebar.connectionsToFinish": "Соединения для завершения в Приложения → MCP-серверы: {count}",
   "sidebar.presetsImported": "Пресеты ботов добавлены в «Новый бот»: {count}",
   "sidebar.nav.teamMap": "Карта команды",
+  "sidebar.nav.panels": "Панели",
   "sidebar.nav.automations": "Автоматизации",
   "sidebar.nav.connectedApps": "Подключённые приложения",
   "sidebar.tools": "Инструменты",

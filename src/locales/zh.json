@@ -2284,6 +2284,7 @@
   "sidebar.connectionsToFinish": "需在「应用 → MCP servers」中完成的连接：{count}",
   "sidebar.presetsImported": "已把 {count} 个预设机器人添加到新建机器人",
   "sidebar.nav.teamMap": "团队地图",
+  "sidebar.nav.panels": "面板",
   "sidebar.nav.automations": "自动化",
   "sidebar.nav.connectedApps": "已连接应用",
   "sidebar.connectApps": "连接应用",

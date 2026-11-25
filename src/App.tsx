@@ -28,7 +28,7 @@ import { anySidePanel, botPanelFloats, panelsMovingSidebar, sidebarFoldsForPanel
 import { preloadConnectedApps } from "@/lib/connected-apps";
 import {
   ActivityPanel, AnnouncementsPage, BotSettingsDialog, CloudAddDialog, ComputerPanel, FilesView, InboxPanel, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
-  PluginsPanel, preloadScreens, PublishedAppsPage, RemoteAgentSettingsPanel, SkillBurgersPage, RemoteDesktopPanel, RoomPanel, SettingsModal, TeamFilesPage, TeamMapPage, TriggersPage,
+  PanelsPage, PluginsPanel, preloadScreens, PublishedAppsPage, RemoteAgentSettingsPanel, SkillBurgersPage, RemoteDesktopPanel, RoomPanel, SettingsModal, TeamFilesPage, TeamMapPage, TriggersPage,
 } from "@/components/lazy-screens";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { closeRoomPanel, useRoomPanelShown } from "@/lib/room-panel";
@@ -188,7 +188,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
     view: state.activeView, pluginsOpen: state.pluginsOpen, settingsOpen: state.settingsOpen });
   const closeDrawer = useCallback(() => { hideDrawer(); menuButtonRef.current?.focus(); }, [hideDrawer]);
   const notificationFeed = useNotificationFeed() && !remoteClient;
-  const advanced = useAdvancedMode(), skillBurger = useFeature("skillBurger");
+  const advanced = useAdvancedMode(), skillBurger = useFeature("skillBurger"), panels = useFeature("panels");
   const roomPanelOpen = useRoomPanelShown({ group, state, simple: !advanced && !remoteClient });
   const sidePanels: OpenSidePanels = {
     simple: !advanced, remoteClient, bot: Boolean(bot) && state.settingsOpen, room: roomPanelOpen, inbox: inboxShown, inboxWide: inboxPanel.wide === true,
@@ -441,6 +441,8 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
         <WebPanelPage />
       ) : state.activeView === "skill-burgers" && skillBurger ? (
         <SkillBurgersPage />
+      ) : state.activeView === "panels" && panels ? (
+        <PanelsPage />
       ) : state.activeView === "published-apps" ? (
         <PublishedAppsPage />
       ) : state.activeView === "announcements" ? (
