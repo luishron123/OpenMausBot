@@ -4568,4 +4568,19 @@ describe("schedule automations that keep a panel", () => {
     expect(h.manager.listRoutines()[0]).not.toHaveProperty("cardKey");
     expect(() => h.manager.update(routine.id, { panelId: "pnl_1", cardKey: "Not A Key" })).toThrow("card key");
   });
+
+  it("keeps a run going while the host reminds it in another turn, and completes it after that turn", async () => {
+    const h = harness();
+    const reminded: Array<{ runId: string; threadId: string }> = [];
+    h.options.remindRun = (run, threadId) => { if (reminded.length) return false; reminded.push({ runId: run.id, threadId }); return true; };
+    const routine = h.manager.create(input());
+    const run = h.manager.runNow(routine.id)!; await h.manager.tick();
+    const threadId = h.started[0]!.threadId;
+    const done = () => h.manager.handleRuntimeEvent({ eventId: `done-${reminded.length}`, provider: "fake", threadId, createdAt: new Date().toISOString(), type: "turn.completed", ok: true });
+    done();
+    expect(reminded).toEqual([{ runId: run.id, threadId }]);
+    expect(h.manager.listRuns().find((one) => one.id === run.id)).toMatchObject({ status: "running" });
+    done();
+    expect(h.manager.listRuns().find((one) => one.id === run.id)).toMatchObject({ status: "completed" });
+  });
 });

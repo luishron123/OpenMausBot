@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { PANEL_CARD_SIZES, PANEL_KEY, PANEL_LIMITS, PANEL_VISIBILITIES, PANELS_VERSION, type Panel, type PanelCard, type PanelCardSize, type PanelVisibility } from "../../shared/panels.ts";
+import { PANEL_CARD_SIZES, PANEL_FAILURE_CODES, PANEL_KEY, PANEL_LIMITS, PANEL_VISIBILITIES, PANELS_VERSION, type Panel, type PanelCard, type PanelCardSize, type PanelFailureCode, type PanelVisibility } from "../../shared/panels.ts";
 import type { WidgetRoot } from "../../shared/widget.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { redactSecretsInText } from "../redact.ts";
@@ -34,6 +34,7 @@ export const cardSchema = z.looseObject({
   status: z.enum(["ok", "failed"]),
   failure: z.string().max(PANEL_LIMITS.failure).optional(),
   failedAt: stamp.optional(),
+  failureCode: z.enum(PANEL_FAILURE_CODES).optional().catch(undefined),
 });
 export const panelSchema = z.looseObject({
   id, key: key.optional(),
@@ -45,7 +46,10 @@ export const panelSchema = z.looseObject({
   cards: z.array(z.unknown()).max(PANEL_LIMITS.cardsPerPanel),
   visibility: z.enum(PANEL_VISIBILITIES).optional(),
 });
-const fileSchema = z.object({ version: z.literal(PANELS_VERSION), panels: z.array(z.unknown()) });
+// Drafts are kept beside the panels, not in their cards: a panel holds at most `cardsPerPanel` cards for any build that
+// reads this file, and an older build drops the drafts it does not know.
+const fileSchema = z.object({ version: z.literal(PANELS_VERSION), panels: z.array(z.unknown()), drafts: z.array(z.unknown()).optional() });
+const draftSchema = z.object({ panelId: id, card: z.unknown() });
 
 /** A panel that parses, with only its cards that parse; null when the panel itself does not. */
 export function parsePanel(candidate: unknown): Panel | null {
@@ -83,13 +87,22 @@ export function readPanelsFile(file: string): Read {
     return { panels: [], writable: false, why: `${PANELS_FILE} in the data folder is not valid JSON` };
   }
   if (!parsed.success) return { panels: [], writable: false, why: `${PANELS_FILE} in the data folder was written by another version` };
-  return { panels: parsed.data.panels.flatMap((one) => { const panel = parsePanel(one); return panel ? [panel] : []; }), writable: true };
+  const panels = parsed.data.panels.flatMap((one) => { const panel = parsePanel(one); return panel ? [panel] : []; });
+  for (const one of parsed.data.drafts ?? []) {
+    const draft = draftSchema.safeParse(one);
+    const card = draft.success ? parseCard(draft.data.card) : null;
+    const panel = draft.success ? panels.find((candidate) => candidate.id === draft.data.panelId) : undefined;
+    if (!card || !panel || panel.cards.some((other) => other.id === card.id)) continue;
+    panel.cards.push({ ...card, draft: true });
+  }
+  return { panels, writable: true };
 }
 
 export function writePanelsFile(file: string, panels: readonly Panel[]): void {
   mkdirSync(dirname(file), { recursive: true });
-  const stored = panels.map(({ automations: _automations, ...panel }) => panel);
-  writeFileAtomic(file, JSON.stringify({ version: PANELS_VERSION, panels: stored }, null, 2), { mode: 0o600 });
+  const stored = panels.map(({ automations: _automations, ...panel }) => ({ ...panel, cards: panel.cards.filter((card) => !card.draft) }));
+  const drafts = panels.flatMap((panel) => panel.cards.filter((card) => card.draft).map((card) => ({ panelId: panel.id, card })));
+  writeFileAtomic(file, JSON.stringify({ version: PANELS_VERSION, panels: stored, ...(drafts.length ? { drafts } : {}) }, null, 2), { mode: 0o600 });
 }
 
 export type PanelsError = { ok: false; status: 400 | 404 | 409; error: string };
@@ -142,6 +155,14 @@ const setVisibility = (panel: Panel, visibility: PanelVisibility) => {
   else delete panel.visibility;
 };
 const clip = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
+export const PANEL_FULL = `This panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Remove one first, or keep this card on another panel.`;
+const DRAFTS_FULL = `This panel already has ${PANEL_LIMITS.draftsPerPanel} tests going. Keep or close one first.`;
+/** Why `panel` has no room for one more card like `card`; a draft takes a test's place, not a card's. */
+const noRoom = (panel: Panel, card: { draft?: true | null }): string | null => {
+  const drafts = panel.cards.filter((one) => one.draft).length;
+  if (card.draft) return drafts >= PANEL_LIMITS.draftsPerPanel ? DRAFTS_FULL : null;
+  return panel.cards.length - drafts >= PANEL_LIMITS.cardsPerPanel ? PANEL_FULL : null;
+};
 
 export interface PanelStoreOptions {
   dataDir: string;
@@ -279,9 +300,8 @@ export function createPanelStore(options: PanelStoreOptions) {
         if (!panel) return fail(404, `No panel ${panelId}. Call list_panels for the ids, or create_panel first.`);
         const at = now();
         const existing = input.key ? findCard(panel, { key: input.key }) : undefined;
-        if (!existing && panel.cards.length >= PANEL_LIMITS.cardsPerPanel) {
-          return fail(409, `This panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Replace one by its key, or make another panel.`);
-        }
+        const full = existing ? null : noRoom(panel, { draft: input.extra?.draft });
+        if (full) return fail(409, full === PANEL_FULL ? `This panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Replace one by its key, or make another panel.` : full);
         const card: PanelCard = {
           id: existing?.id ?? newId("crd"), ...(input.key ? { key: input.key } : {}), title: input.title,
           size: input.size ?? existing?.size ?? "s", position: existing?.position ?? nextPosition(panel.cards),
@@ -299,7 +319,7 @@ export function createPanelStore(options: PanelStoreOptions) {
     },
 
     /** Changes one card in place. A failure keeps the card's last content and says why; new content clears a failure. */
-    updateCard(panelId: string, ref: { cardId?: string; key?: string }, input: { title?: string; size?: PanelCardSize; content?: CardContent; failed?: string; botId: string; extra?: CardExtra }): PanelsResult<{ panel: Panel; card: PanelCard; previous: PanelCard }> {
+    updateCard(panelId: string, ref: { cardId?: string; key?: string }, input: { title?: string; size?: PanelCardSize; content?: CardContent; failed?: string; failureCode?: PanelFailureCode; botId: string; extra?: CardExtra }): PanelsResult<{ panel: Panel; card: PanelCard; previous: PanelCard }> {
       return change((panels) => {
         const panel = findPanel(panels, panelId);
         if (!panel) return fail(404, `No panel ${panelId}. Call list_panels for the ids.`);
@@ -315,6 +335,7 @@ export function createPanelStore(options: PanelStoreOptions) {
           next.status = "ok";
           delete next.failure;
           delete next.failedAt;
+          delete next.failureCode;
           delete next.building;
         }
         if (input.failed !== undefined) {
@@ -322,6 +343,8 @@ export function createPanelStore(options: PanelStoreOptions) {
           // The card shows this sentence to everyone who sees the panel: it loses its secrets as a widget's text does.
           next.failure = clip(redactSecretsInText(input.failed), PANEL_LIMITS.failure);
           next.failedAt = at;
+          if (input.failureCode) next.failureCode = input.failureCode;
+          else delete next.failureCode;
           delete next.building;
         }
         applyExtra(next, input.extra);
@@ -372,7 +395,9 @@ export function createPanelStore(options: PanelStoreOptions) {
         if (!from || !to) return fail(404, "No such panel.");
         const card = findCard(from, { cardId });
         if (!card) return fail(404, "No such card.");
-        if (to.cards.length >= PANEL_LIMITS.cardsPerPanel) return fail(409, `That panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Remove one first.`);
+        const draft = extra && Object.hasOwn(extra, "draft") ? extra.draft : card.draft;
+        const full = noRoom(to, { draft });
+        if (full) return fail(409, full);
         from.cards.splice(from.cards.indexOf(card), 1);
         if (card.key && findCard(to, { key: card.key })) card.key = freeCardKey(to, card.key);
         card.position = nextPosition(to.cards);
@@ -384,6 +409,20 @@ export function createPanelStore(options: PanelStoreOptions) {
       });
       if (result.ok) for (const listener of listeners) listener({ panelId: result.from.id, botId: result.from.createdBy.botId });
       return result;
+    },
+
+    /** A draft the person kept on its own panel: it takes a card's place there. */
+    keepDraft(panelId: string, cardId: string): PanelsResult<{ panel: Panel; card: PanelCard }> {
+      return change((panels) => {
+        const panel = findPanel(panels, panelId);
+        const card = panel && findCard(panel, { cardId });
+        if (!panel || !card) return fail(404, "No such card.");
+        if (!card.draft) return { ok: true, panel, card, change: { panelId, botId: panel.createdBy.botId } };
+        const full = noRoom(panel, {});
+        if (full) return fail(409, full);
+        applyExtra(card, { draft: null, draftAt: null });
+        return { ok: true, panel, card, change: touched(panel, now()) };
+      });
     },
 
     /** Drafts made before `before`, removed; each comes back with its panel's id. */
@@ -425,7 +464,8 @@ export function createPanelStore(options: PanelStoreOptions) {
         if (!panel) return fail(404, "No such panel.");
         if (findCard(panel, { cardId: card.id })) return fail(409, "That card is already here.");
         if (card.key && findCard(panel, { key: card.key })) return fail(409, `Another card has the key ${card.key} now.`);
-        if (panel.cards.length >= PANEL_LIMITS.cardsPerPanel) return fail(409, `This panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Remove one first.`);
+        const full = noRoom(panel, card);
+        if (full) return fail(409, full);
         if (tooBig(card)) return fail(400, TOO_BIG);
         panel.cards.push(card);
         panel.cards.sort((a, b) => a.position - b.position);

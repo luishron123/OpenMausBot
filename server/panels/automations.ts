@@ -14,7 +14,7 @@ import { cadenceOf } from "./cards.ts";
 import { PANEL_TOOL_PATH, privateHides, type PanelCaller } from "./tools.ts";
 import type { PanelTurnAccess } from "./turn-access.ts";
 
-export type PanelRoutines = Pick<RoutineManager, "listRoutines" | "listRuns" | "update" | "runNow" | "create" | "remove">;
+export type PanelRoutines = Pick<RoutineManager, "listRoutines" | "listRuns" | "update" | "runNow" | "create" | "remove" | "failThread">;
 
 export const PANEL_LINK_PATH = `${PANEL_TOOL_PATH}/link`;
 

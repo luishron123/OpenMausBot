@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -12,9 +12,10 @@ import type { RequestAuth } from "../request-auth.ts";
 import type { Routine, RoutineInput, RoutineRun } from "../routines.ts";
 import { dispatchRoutes } from "../routes/table.ts";
 import type { PanelRoutines } from "./automations.ts";
-import { ALREADY_UPDATED, FAILURES_TO_PAUSE, NO_UPDATE_FAILURE, PAUSED_FAILURE, routineSchedule, scheduleOf } from "./cards.ts";
+import { ALREADY_UPDATED, ENGINE_FAILURE, FAILURES_TO_PAUSE, NO_UPDATE_FAILURE, NOT_FENCED_FAILURE, PAUSED_FAILURE, SCHEDULED_FULL, routineSchedule, scheduleOf } from "./cards.ts";
 import type { PanelChats, PinnableMessage } from "./pinnable.ts";
-import { createPanels } from "./wiring.ts";
+import { PANEL_FULL } from "./store.ts";
+import { createPanels, type PanelsDeps } from "./wiring.ts";
 
 const servers: Server[] = [];
 const dirs: string[] = [];
@@ -56,7 +57,7 @@ function fakeRoutines() {
     runNow: (id: string) => {
       const routine = routines.find((one) => one.id === id);
       if (!routine) return null;
-      const run = { id: `run-${++next}`, routineId: id, botId: routine.botId, status: "running", threadId: `thread-${next}`, scheduledFor: Date.now() } as unknown as RoutineRun;
+      const run = { id: `run-${++next}`, routineId: id, botId: routine.botId, status: "running", threadId: `thread-${next}`, scheduledFor: Date.now(), ...(routine.access ? { access: routine.access } : {}) } as unknown as RoutineRun;
       runs.unshift(run);
       return run;
     },
@@ -64,10 +65,12 @@ function fakeRoutines() {
   return { manager, routines, runs };
 }
 
-async function serve(options: { messages?: Record<string, PinnableMessage[]> } = {}) {
-  const dataDir = mkdtempSync(join(tmpdir(), "omb-panels-cards-"));
-  dirs.push(dataDir);
-  const fake = fakeRoutines();
+type ServeOptions = { messages?: Record<string, PinnableMessage[]>; dataDir?: string; fake?: ReturnType<typeof fakeRoutines> } & Pick<PanelsDeps, "fenced" | "continueRun" | "threadBusy">;
+
+async function serve(options: ServeOptions = {}) {
+  const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "omb-panels-cards-"));
+  if (!options.dataDir) dirs.push(dataDir);
+  const fake = options.fake ?? fakeRoutines();
   const notices: Array<{ botId: string; text: string }> = [];
   const started: string[] = [];
   const messages = options.messages ?? {};
@@ -81,6 +84,7 @@ async function serve(options: { messages?: Record<string, PinnableMessage[]> } =
     routines: () => fake.manager, personStarted: (_auth, run) => started.push(run.id), timeZone: () => "America/Sao_Paulo",
     notice: (botId, text) => notices.push({ botId, text }), chats,
     bot: (botId) => (botId === "scout" ? { name: "Scout", title: "Sales analyst", description: "Watches the Shopify store. Reports daily." } : null),
+    ...(options.fenced ? { fenced: options.fenced } : {}), ...(options.continueRun ? { continueRun: options.continueRun } : {}), ...(options.threadBusy ? { threadBusy: options.threadBusy } : {}),
   });
   closers.push(panels.close);
   const server = createServer(async (req, res) => {
@@ -108,7 +112,7 @@ async function serve(options: { messages?: Record<string, PinnableMessage[]> } =
     if (cost !== undefined) run.cost = cost;
     panels.runChanged(run);
   };
-  return { api, tool, end, store: panels.store, panels, ...fake, notices, started };
+  return { api, tool, end, store: panels.store, panels, ...fake, fake, dataDir, notices, started };
 }
 
 const widget = (value: string) => ({ type: "Card", children: [{ type: "Title", value }] });
@@ -236,12 +240,12 @@ it("fails a card whose own run ended without an update, and pauses its routine a
 
   for (let failure = 1; failure < FAILURES_TO_PAUSE; failure++) {
     harness.end(harness.manager.runNow(routine.id)!, "completed");
-    expect(card()).toMatchObject({ status: "failed", failure: NO_UPDATE_FAILURE, text: "$1" });
+    expect(card()).toMatchObject({ status: "failed", failure: NO_UPDATE_FAILURE, failureCode: "no_update", text: "$1" });
     expect(routine.enabled).toBe(true);
   }
   harness.end(harness.manager.runNow(routine.id)!, "failed");
   expect(routine.enabled).toBe(false);
-  expect(card()).toMatchObject({ status: "failed", failure: PAUSED_FAILURE });
+  expect(card()).toMatchObject({ status: "failed", failure: PAUSED_FAILURE, failureCode: "paused" });
 
   const resolved = await harness.api(`/api/panels/${panelId}/cards/${card().id}/resolve`, "POST", {});
   expect(resolved.status).toBe(202);
@@ -440,4 +444,128 @@ it("suggests cards from the bot's automations first, then from what the bot is f
     { title: "Needs attention", prompt: "Open items that need attention now for Sales analyst, most urgent first, at most 5.", format: "checklist", schedule: "hour" },
   ]);
   expect((await harness.api("/api/panels/suggestions?botId=hidden")).status).toBe(404);
+});
+
+it("makes a card's own routine read-only, keeps its answer out of every chat, and refuses an engine the fence does not hold", async () => {
+  const fencedBots = new Set(["scout"]);
+  const harness = await serve({ fenced: (botId) => fencedBots.has(botId) });
+  const panelId = await salesPanel(harness);
+  await harness.tool("set-card", { panel_id: "daily-sales", card_key: "revenue", title: "Revenue", widget: widget("$1"), prompt: "Revenue", schedule: "hour" });
+  const own = harness.routines[0]!;
+  expect(own.access).toBe("read-and-draft");
+  const linked = harness.manager.create({ name: "Central report", prompt: "p", botId: "scout", schedule: { type: "interval", everyMinutes: 60 }, panelId, cardKey: "revenue" } as RoutineInput);
+
+  const run = harness.manager.runNow(own.id)!;
+  expect(harness.panels.runRefusal(run)).toBeNull();
+  expect(harness.panels.quiet(run)).toBe(true);
+  expect(harness.panels.mayReach(run.threadId!, "POST /api/internal/panels/update-card")).toBe(true);
+  expect(harness.panels.mayReach(run.threadId!, "POST /api/internal/panels/set-card")).toBe(false);
+  expect(harness.panels.mayReach("chat-scout", "POST /api/internal/panels/update-card")).toBe(false);
+  const other = harness.manager.runNow(linked.id)!;
+  expect([harness.panels.runRefusal(other), harness.panels.quiet(other)]).toEqual([null, false]);
+  expect(linked.access).toBeUndefined();
+
+  delete own.access;
+  const older = harness.manager.runNow(own.id)!;
+  expect(harness.panels.runRefusal(older)).toBe(NOT_FENCED_FAILURE);
+  expect(own.access).toBe("read-and-draft");
+
+  fencedBots.delete("scout");
+  const unfenced = harness.manager.runNow(own.id)!;
+  expect(harness.panels.runRefusal(unfenced)).toBe(ENGINE_FAILURE);
+  unfenced.error = ENGINE_FAILURE;
+  harness.end(unfenced, "failed");
+  expect(harness.store.get(panelId)!.cards[0]).toMatchObject({ status: "failed", failure: ENGINE_FAILURE, failureCode: "engine" });
+});
+
+it("reminds a card's own run once, after its turn settles, before it counts as no update", async () => {
+  const continued: Array<{ runId: string; threadId: string; text: string }> = [];
+  let busy = true;
+  let next!: () => void;
+  const sent = new Promise<void>((done) => { next = done; });
+  const harness = await serve({
+    threadBusy: () => busy,
+    continueRun: async (run, threadId, text) => { continued.push({ runId: run.id, threadId, text }); next(); },
+  });
+  await salesPanel(harness);
+  await harness.tool("set-card", { panel_id: "daily-sales", card_key: "revenue", title: "Revenue", widget: widget("$1"), prompt: "Revenue", schedule: "hour" });
+  const run = harness.manager.runNow(harness.routines[0]!.id)!;
+
+  expect(harness.panels.remindRun(run, run.threadId!)).toBe(true);
+  expect(harness.panels.remindRun(run, run.threadId!)).toBe(false);
+  await Promise.resolve();
+  expect(continued).toEqual([]);
+  busy = false;
+  await sent;
+  expect(continued).toEqual([{ runId: run.id, threadId: run.threadId, text: expect.stringContaining('card_key "revenue"') }]);
+
+  const updated = harness.manager.runNow(harness.routines[0]!.id)!;
+  await harness.tool("update-card", { panel_id: "daily-sales", card_key: "revenue", widget: widget("$2") }, updated.threadId!);
+  expect(harness.panels.remindRun(updated, updated.threadId!)).toBe(false);
+  const chat = { id: "run-x", routineId: "rtn-none", botId: "scout", status: "running" } as unknown as RoutineRun;
+  expect(harness.panels.remindRun(chat, "thread-x")).toBe(false);
+});
+
+it("keeps tests out of the 24-card and scheduled limits, and checks both when a test is kept here or on another panel", async () => {
+  const harness = await serve();
+  const panelId = await salesPanel(harness);
+  for (let card = 0; card < PANEL_LIMITS.cardsPerPanel; card++) {
+    const set = harness.store.setCard(panelId, { key: `c${card}`, title: `C${card}`, botId: "scout", content: { widget: widget("1") as never, text: "1" } });
+    if (!set.ok) throw new Error(set.error);
+  }
+  const test = (prompt: string, schedule = "week") => harness.api(`/api/panels/${panelId}/cards/new`, "POST", { prompt, format: "kpi", size: "s", botId: "scout", schedule, notify: false, test: true });
+  const draft = await test("Refunds");
+  expect(draft.status).toBe(202);
+  const full = await harness.api(`/api/panels/${panelId}/cards/${draft.body.card.id}/keep`, "POST", {});
+  expect(full).toMatchObject({ status: 409, body: { error: PANEL_FULL } });
+  for (let more = 1; more < PANEL_LIMITS.draftsPerPanel; more++) expect((await test(`Test ${more}`)).status).toBe(202);
+  expect((await test("One too many")).status).toBe(409);
+
+  const other = harness.store.create({ title: "Busy", createdBy: { botId: "scout" } });
+  if (!other.ok) throw new Error(other.error);
+  for (let panel = 0; panel < 3; panel++) {
+    const made = harness.store.create({ title: `P${panel}`, createdBy: { botId: "scout" } });
+    if (!made.ok) throw new Error(made.error);
+    for (let card = 0; card < (panel < 2 ? 20 : 19); card++) harness.store.setCard(made.panel.id, { key: `s${card}`, title: `S${card}`, botId: "scout", content: { widget: widget("1") as never, text: "1" }, extra: { prompt: "x", schedule: "week" } });
+  }
+  const moved = await harness.api(`/api/panels/${panelId}/cards/${draft.body.card.id}/keep`, "POST", { panelId: other.panel.id });
+  expect(moved.status).toBe(200);
+  expect(moved.body.panel.cards[0]).toMatchObject({ id: draft.body.card.id });
+  expect((await harness.api(`/api/panels/${panelId}/cards/new`, "POST", { prompt: "Live", format: "kpi", size: "s", botId: "scout", schedule: "week", notify: false, test: false })).body.error).toBe(SCHEDULED_FULL);
+  expect((await test("Still a test")).status).toBe(202);
+  const second = harness.store.get(panelId)!.cards.find((one) => one.draft)!;
+  expect(await harness.api(`/api/panels/${panelId}/cards/${second.id}/keep`, "POST", { panelId: other.panel.id })).toMatchObject({ status: 409, body: { error: SCHEDULED_FULL } });
+  expect(harness.store.get(panelId)!.cards.find((one) => one.id === second.id)).toMatchObject({ draft: true });
+
+  const onDisk = JSON.parse(readFileSync(join(harness.dataDir, "panels.json"), "utf8"));
+  const sales = onDisk.panels.find((one: { id: string }) => one.id === panelId);
+  expect(sales.cards).toHaveLength(PANEL_LIMITS.cardsPerPanel);
+  expect(onDisk.drafts).toHaveLength(PANEL_LIMITS.draftsPerPanel);
+  expect(onDisk.drafts[0]).toMatchObject({ panelId, card: { draft: true } });
+});
+
+it("keeps a removed card's paused routines, the person's Ask for a change and a run's update across a restart", async () => {
+  const first = await serve();
+  const panelId = await salesPanel(first);
+  await first.tool("set-card", { panel_id: "daily-sales", card_key: "revenue", title: "Revenue", widget: widget("$1"), prompt: "Revenue", schedule: "hour" });
+  await first.tool("set-card", { panel_id: "daily-sales", card_key: "orders", title: "Orders", widget: widget("1"), prompt: "Orders", schedule: "hour" });
+  const [revenue, orders] = first.store.get(panelId)!.cards;
+  const [ownRevenue, ownOrders] = first.routines;
+  expect((await first.api(`/api/panels/${panelId}/cards/${orders!.id}/change`, "POST", { text: "Only paid orders" })).status).toBe(202);
+  const run = first.runs[0]!;
+  const later = first.manager.runNow(ownRevenue!.id)!;
+  await first.tool("update-card", { panel_id: "daily-sales", card_key: "revenue", widget: widget("$2") }, later.threadId!);
+  const removed = await first.api(`/api/panels/${panelId}/cards/${revenue!.id}`, "DELETE");
+  expect(ownRevenue!.enabled).toBe(false);
+  first.panels.close();
+
+  const second = await serve({ dataDir: first.dataDir, fake: first.fake });
+  expect(second.panels.runNote(ownOrders)).toContain('The person asked for this change: "Only paid orders"');
+  expect((await second.api(`/api/panels/${panelId}/cards/restore`, "POST", { card: removed.body.card })).status).toBe(200);
+  expect(ownRevenue!.enabled).toBe(true);
+  second.end(later, "completed");
+  expect(second.store.get(panelId)!.cards.find((one) => one.key === "revenue")).toMatchObject({ status: "ok", text: "$2" });
+  second.end(run, "completed");
+  expect(second.store.get(panelId)!.cards.find((one) => one.key === "orders")).toMatchObject({ status: "failed", failureCode: "no_update" });
+  expect(second.panels.runNote(ownOrders)).not.toContain("asked for this change");
 });

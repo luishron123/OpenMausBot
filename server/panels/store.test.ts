@@ -204,6 +204,23 @@ describe("cards beyond one panel", () => {
     expect(changes.map((change) => change.panelId).sort()).toEqual([one.id, two.id].sort());
   });
 
+  it("writes tests apart from a panel's cards, reads them back as drafts, and keeps one in place only with room", () => {
+    const { store, file } = storeIn();
+    const panel = made(store.create({ title: "Sales", createdBy: author })).panel;
+    made(store.setCard(panel.id, { key: "test", title: "Test", botId: "scout", extra: { draft: true, draftAt: "2026-11-25T10:30:00.000Z" } }));
+    made(store.setCard(panel.id, { key: "kept", title: "Kept", content: content("1"), botId: "scout" }));
+    const onDisk = JSON.parse(readFileSync(file, "utf8"));
+    expect(onDisk.panels[0].cards.map((card: { key: string }) => card.key)).toEqual(["kept"]);
+    expect(onDisk.drafts).toEqual([{ panelId: panel.id, card: expect.objectContaining({ key: "test", draft: true }) }]);
+    expect(readPanelsFile(file).panels[0]!.cards.map((card) => [card.key, card.draft ?? false])).toEqual([["kept", false], ["test", true]]);
+    for (let more = 1; more < PANEL_LIMITS.cardsPerPanel; more++) made(store.setCard(panel.id, { key: `c${more}`, title: `C${more}`, content: content("1"), botId: "scout" }));
+    const test = store.get(panel.id)!.cards.find((card) => card.draft)!;
+    expect(store.keepDraft(panel.id, test.id)).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("Remove one first") });
+    made(store.removeCard(panel.id, store.get(panel.id)!.cards.find((card) => card.key === "c1")!.id));
+    expect(made(store.keepDraft(panel.id, test.id)).card.draft).toBeUndefined();
+    expect(JSON.parse(readFileSync(file, "utf8")).drafts).toBeUndefined();
+  });
+
   it("sweeps only drafts made before the cutoff", () => {
     const { store } = storeIn();
     const panel = made(store.create({ title: "Sales", createdBy: author })).panel;

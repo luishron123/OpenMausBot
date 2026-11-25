@@ -241,7 +241,7 @@ export interface RoutineManagerOptions {
   emit?: (payload: Record<string, unknown>) => void;
   botState: (botId: string) => "ready" | "busy" | "missing";
   /** Why this bot takes no runs now (or not `run`), in the person's words; null when it does. */ pausedText?: (botId: string, run?: RoutineRun) => string | null; /** The person paused this bot: its runs are let go quietly, not failed into To review. */ held?: (botId: string) => boolean; /** A reached usage cap (host/usage-cap-gate.ts): `capSkip` for a scheduled occurrence, which is counted on one `missed` row per cap and period and never switches the routine off; `capText` for a run already queued. */ capSkip?: (botId: string, routineId: string) => { behind: string; resetsAt: number; words(count: number): RoutineLine } | null; capText?: (botId: string, trigger: RoutineRunTrigger) => string | null;
-  goalState?: (groupId: string | undefined, coordinatorBotId: string) => "ready" | "busy" | "missing"; /** A line added to a run's instructions for its routine, such as the panel it keeps. */ runNote?: (routine: Routine | undefined) => string | null;
+  goalState?: (groupId: string | undefined, coordinatorBotId: string) => "ready" | "busy" | "missing"; /** A line added to a run's instructions for its routine, such as the panel it keeps. */ runNote?: (routine: Routine | undefined) => string | null; /** True when a run whose turn ended well goes on with another turn the host starts in its conversation (a panel card's one reminder), so it is not complete yet. */ remindRun?: (run: RoutineRun, threadId: string) => boolean;
   createTask: (botId: string, title: string, run?: RoutineRun) => { threadId: string } | null;
   joinConversation?: (run: RoutineRun) => string | null;
   createGoalTask?: (groupId: string, title: string) => { threadId: string } | null;
@@ -1296,7 +1296,7 @@ export class RoutineManager {
       const waitsOnTeammates = this.options.hasPendingDelegations?.(event.threadId) === true, handoffRefused = waitsOnTeammates ? null : this.options.refusedHandoff?.(event.threadId);
       if (handoffRefused) { const said = typeof handoffRefused === "string" ? { text: handoffRefused } : handoffRefused; this.failRun(Object.assign(run, { partial: (said.partial !== false && Boolean(run.output)) || undefined }, said.lendingRefused ? { lendingRefused: true as const } : {}), said.text); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
       if (waitsOnTeammates) this.wait(run, ROUTINE_HANDOFF_WAIT);
-      else { Object.assign(run, { status: "completed", attention: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>); this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId); }
+      else if (this.options.remindRun?.(cloneRun(run), event.threadId) !== true) { Object.assign(run, { status: "completed", attention: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>); this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId); }
       run.error = undefined;
     } else {
       return null;

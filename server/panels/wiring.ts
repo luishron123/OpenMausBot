@@ -9,11 +9,12 @@ import type { BotAccessLevel } from "../../shared/bot-access.ts";
 import { createPanelCardRoutes } from "./card-routes.ts";
 import { createPanelCards } from "./cards.ts";
 import { createPanelHistory } from "./history.ts";
+import { createPanelRunState } from "./run-state.ts";
 import { createPinnable, type PanelChats } from "./pinnable.ts";
 import { createPanelRoutes } from "./routes.ts";
 import type { SuggestionBot } from "./suggestions.ts";
 import { createPanelStore } from "./store.ts";
-import { createPanelToolRoutes, type PanelCaller } from "./tools.ts";
+import { createPanelToolRoutes, PANEL_TOOL_PATH, type PanelCaller } from "./tools.ts";
 import type { PanelTurnAccess } from "./turn-access.ts";
 
 export interface PanelsDeps {
@@ -35,7 +36,18 @@ export interface PanelsDeps {
   chats?: PanelChats;
   /** What a bot is for, for New widget's suggestions. */
   bot?(botId: string): SuggestionBot | null;
+  /** Whether this bot's engine runs a read-and-draft routine inside the fence; without it, every engine does. */
+  fenced?(botId: string): boolean;
+  /** Another turn of a routine run in its own conversation, which the run's rules still hold. */
+  continueRun?(run: RoutineRun, threadId: string, text: string): Promise<unknown>;
+  /** A turn runs or settles in this conversation. */
+  threadBusy?(botId: string, threadId: string): boolean;
 }
+
+/** The one route of OpenMausBot's own a card's update run reaches beside the reads read-and-draft.ts lets through. */
+const CARD_UPDATE_ROUTE = `POST ${PANEL_TOOL_PATH}/update-card`;
+const REMINDER_WAIT_MS = 60_000;
+const REMINDER_POLL_MS = 500;
 
 export function createPanels(deps: PanelsDeps) {
   const store = createPanelStore({ dataDir: deps.dataDir });
@@ -44,7 +56,8 @@ export function createPanels(deps: PanelsDeps) {
   const history = createPanelHistory({ dataDir: deps.dataDir });
   const routines = () => deps.routines?.() ?? null;
   const timeZone = () => deps.timeZone?.() || "UTC";
-  const cards = createPanelCards({ store, history, enabled: deps.enabled, routines, timeZone, ...(deps.notice ? { notice: deps.notice } : {}) });
+  const state = createPanelRunState({ dataDir: deps.dataDir });
+  const cards = createPanelCards({ store, history, state, enabled: deps.enabled, routines, timeZone, ...(deps.notice ? { notice: deps.notice } : {}), ...(deps.fenced ? { fenced: deps.fenced } : {}) });
   const automations = createPanelAutomations({
     store, enabled: deps.enabled, routines, timeZone,
     sees: (auth, botId) => auth.scopes.includes("admin") || deps.levelOf(auth, botId) !== "none",
@@ -70,9 +83,30 @@ export function createPanels(deps: PanelsDeps) {
   };
   /** A card's own routine reads its rules; any other routine linked to a panel reads the panel's note. */
   const runNote = (routine: Parameters<typeof cards.runNote>[0]) => cards.runNote(routine) ?? automations.runNote(routine);
+  /** A card's own run whose turn ended with no update is told so once, in a turn of its own once this one has settled;
+   * true when that turn is on its way and the run goes on. */
+  const remindRun = (run: RoutineRun, threadId: string): boolean => {
+    const continueRun = deps.continueRun;
+    const text = continueRun ? cards.reminder(run) : null;
+    if (!continueRun || !text) return false;
+    const since = Date.now();
+    const lost = (why: string) => routines()?.failThread(threadId, `The reminder to update the card could not start: ${why}`);
+    const carryOn = () => {
+      if (deps.threadBusy?.(run.botId, threadId)) {
+        if (Date.now() - since >= REMINDER_WAIT_MS) return lost("the conversation stayed busy");
+        setTimeout(carryOn, REMINDER_POLL_MS).unref?.();
+        return;
+      }
+      continueRun(run, threadId, text).catch((error: unknown) => lost(error instanceof Error ? error.message : String(error)));
+    };
+    queueMicrotask(carryOn);
+    return true;
+  };
+  /** A card's own update run may reach its card's update route, which takes only its own card, once. */
+  const mayReach = (threadId: string, route: string): boolean => route === CARD_UPDATE_ROUTE && cards.ownRun(threadId) !== null;
   const sweeper = setInterval(() => { if (deps.enabled()) cards.sweep(); }, Math.min(PANEL_LIMITS.draftMs / 6, 600_000));
   sweeper.unref?.();
-  return { store, routes, toolRoutes, runNote, runChanged, close: () => clearInterval(sweeper) };
+  return { store, routes, toolRoutes, runNote, runChanged, runRefusal: cards.runRefusal, remindRun, quiet: cards.owns, mayReach, close: () => clearInterval(sweeper) };
 }
 
 export type Panels = ReturnType<typeof createPanels>;
