@@ -2,14 +2,14 @@
 // `routineId`), as opposed to a routine a bot linked to a panel by itself (automations.ts), which keeps working as it
 // always did. A run of a card's own routine may only update that one card, once; ending without an update is a failure,
 // and five failures in a row pause the routine until the person resolves it.
-// Security invariant: a card's own routine is read-and-draft (read-and-draft.ts), so its unattended run reads and may
-// reach no route but its card's update, and it runs only on an engine whose every tool use that fence answers; its reply
-// reaches no chat.
+// A card's own run has its bot's usual access, as any automation of that bot has; the panel routes let it change only
+// its own card, once, and its reply reaches no chat.
 import {
   PANEL_CADENCE_SCHEDULE, PANEL_LIMITS, PANEL_SCHEDULE_CADENCE, PANEL_SCHEDULES,
   type Panel, type PanelAutomation, type PanelCard, type PanelSchedule, type PanelCardUpdate,
 } from "../../shared/panels.ts";
 import type { Routine, RoutineRun } from "../routines.ts";
+import { serverLine } from "../server-lines.ts";
 import type { RoutineScheduleInput } from "../routine-schedules.ts";
 import type { PanelRoutines } from "./automations.ts";
 import type { PanelHistory } from "./history.ts";
@@ -20,14 +20,13 @@ export interface PanelCardsDeps {
   store: PanelStore;
   history: PanelHistory;
   state: PanelRunState;
-  /** Whether this bot's engine runs a read-and-draft routine inside the fence; without it, every engine does. */
-  fenced?(botId: string): boolean;
   enabled(): boolean;
   routines(): PanelRoutines | null;
   /** The person's time zone, for "each day at 08:00". */
   timeZone(): string;
   /** Tells the person something about a bot's card, through the app's notifications. */
-  notice?(botId: string, text: string): void;
+  /** A notice for the person, in their language. */
+  notice?(botId: string, line: (language: string | undefined) => string): void;
   now?(): number;
 }
 
@@ -43,7 +42,6 @@ const GOING = new Set(["queued", "running", "waiting"]);
 const ENDED_BADLY = new Set(["completed", "failed"]);
 const RUNS_PER_DAY: Record<PanelSchedule, number> = { half: 48, hour: 24, day: 1, week: 1 / 7, manual: 0 };
 const isScheduled = (schedule: PanelSchedule | undefined) => schedule !== undefined && schedule !== "manual";
-const READ_ONLY = "read-and-draft";
 
 export function runsPerDay(schedule: PanelSchedule): number {
   return RUNS_PER_DAY[schedule];
@@ -84,7 +82,6 @@ const sameWidget = (a: PanelCard["widget"], b: PanelCard["widget"]) => JSON.stri
 export function createPanelCards(deps: PanelCardsDeps) {
   const { store, history, state } = deps;
   const now = () => deps.now?.() ?? Date.now();
-  const fenced = (botId: string): boolean => deps.fenced?.(botId) ?? true;
 
   const routineById = (routineId: string | undefined) => (routineId ? deps.routines()?.listRoutines().find((one) => one.id === routineId) : undefined);
   /** The card whose own routine this is. */
@@ -141,7 +138,7 @@ export function createPanelCards(deps: PanelCardsDeps) {
     const schedule = card.schedule ?? "manual";
     const enabled = !card.draft && isScheduled(schedule);
     const botId = options.botId ?? existing?.botId ?? card.botId;
-    const base = { name: `Panel card: ${card.title}`.slice(0, 80), prompt: instruction(panel, card), botId, panelId: panel.id, cardKey: card.key, access: READ_ONLY } as const;
+    const base = { name: `Panel card: ${card.title}`.slice(0, 80), prompt: instruction(panel, card), botId, panelId: panel.id, cardKey: card.key } as const;
     let routine: Routine | null;
     try {
       if (existing) {
@@ -209,9 +206,9 @@ export function createPanelCards(deps: PanelCardsDeps) {
     };
     history.add(card.id, entry);
     if (card.draft) return;
-    if (about.alert) deps.notice?.(card.botId, `Alert on "${card.title}" (${panel.title}): ${about.alert}`);
+    if (about.alert) deps.notice?.(card.botId, (language) => serverLine(language, "server.panels.alert", { card: card.title, panel: panel.title, alert: about.alert ?? "" }));
     if (card.notify && previous?.widget && card.widget && !sameWidget(previous.widget, card.widget)) {
-      deps.notice?.(card.botId, `"${card.title}" on ${panel.title} changed${about.summary ? `: ${about.summary}` : "."}`);
+      deps.notice?.(card.botId, (language) => about.summary ? serverLine(language, "server.panels.changedWhy", { card: card.title, panel: panel.title, summary: about.summary }) : serverLine(language, "server.panels.changed", { card: card.title, panel: panel.title }));
     }
   }
 
@@ -289,7 +286,7 @@ export function createPanelCards(deps: PanelCardsDeps) {
   function shown(card: PanelCard): PanelCard {
     const own = routineById(card.routineId);
     if (!own) return card;
-    return { ...card, ...(own.heldFor ? { held: { reason: own.heldFor } } : {}), updateAccess: fenced(own.botId) ? "fenced" : "bot" };
+    return { ...card, ...(own.heldFor ? { held: { reason: own.heldFor } } : {}),  };
   }
 
   /** The run note for a card's own routine; null for any other routine. */
@@ -299,26 +296,21 @@ export function createPanelCards(deps: PanelCardsDeps) {
     if (!found) return null;
     const change = state.asked.get(routine.id);
     return [
-      `This is an update run for one panel card. Only read: look things up, but do not write, send, buy or change anything, and do not reply in chat; nobody reads this conversation.`,
+      `This is an update run for one panel card. Look up what the card tracks, and do not reply in chat; nobody reads this conversation.`,
       `Call update_panel_widget exactly once, for panel_id "${found.panel.id}" and card_key "${found.card.key}". No other panel or card can be changed from this run.`,
       ...(change ? [`The person asked for this change: "${change}". Apply it; you may send a new prompt or schedule with the update.`] : []),
     ].join("\n");
   }
 
-  /** Why a card's own run may not start: its routine is not read-only yet (made by an earlier build; it is made read-only
-   * here for its next run). Null for any other run. A bot whose engine the fence cannot hold runs it as any automation of
-   * that bot runs, with that bot's own access; its routine stays read-only for an engine that can. */
+  /** A card's own run runs with its bot's usual access, as any automation of that bot does. A routine an earlier test
+   * build made read-only loses that here, for this run and the next. Never refuses: null. */
   function runRefusal(run: RoutineRun): string | null {
     if (!deps.enabled()) return null;
     const own = cardOf(run.routineId) ? routineById(run.routineId) : undefined;
     if (!own) return null;
-    if (!fenced(run.botId)) {
-      delete run.access;
-      return null;
-    }
-    if (run.access === READ_ONLY) return null;
-    try { deps.routines()?.update(own.id, { access: READ_ONLY }); } catch { /* refused again next run */ }
-    return NOT_FENCED_FAILURE;
+    if (run.access) delete run.access;
+    if (own.access) { try { deps.routines()?.update(own.id, { access: undefined }); } catch { /* cleared next run */ } }
+    return null;
   }
 
   /** The one line a card's own run is told when its turn ended with no update; null once told, or for any other run. */

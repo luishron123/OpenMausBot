@@ -47,11 +47,6 @@ export interface PanelErrorBody {
   errorKey?: PanelLimitErrorKey;
 }
 
-/** How a card's own automation runs. "fenced": read-only, inside OpenMausBot's fence. "bot": this bot's AI cannot run it
- * fenced, so it runs as any automation of that bot does, with that bot's own access. */
-export const PANEL_UPDATE_ACCESS = ["fenced", "bot"] as const;
-export type PanelUpdateAccess = (typeof PANEL_UPDATE_ACCESS)[number];
-
 /** Lowercase letters, digits and hyphens: the key a bot gives a panel or card so making it again finds the same one. */
 export const PANEL_KEY = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -130,8 +125,6 @@ export interface PanelCard {
   building?: true;
   /** Its own automation is waiting (a usage limit, a budget, a computer that is off), and until when if known. */
   held?: { reason: string; until?: string };
-  /** Set by the server on a card with its own automation, never stored. */
-  updateAccess?: PanelUpdateAccess;
 }
 
 /** One past update of a card, newest first, at most `PANEL_LIMITS.historyPerCard`. Kept in `panels-history.json`. */

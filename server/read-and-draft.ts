@@ -7,15 +7,11 @@
 //   checks handed it, to that thread's sender, once;
 // - what those reads return reaches it only as records;
 // - no browser, computer, phone or other tools are mounted, and nothing it says is captured into memory.
-// A panel card's own update run may also read with the bot's own tools, an exception to agent-tool-policy.ts's rule that
-// a third party's annotations never grant read access, held to that run alone: the bot's own MCP servers offer only the
-// tools they mark read-only and not destructive, and a call to any other is refused (mcp-gate.ts); the relay lets it
-// run any app's read-only tool; it still gets no web, browser, shell or other tools.
 // A new Cloud's first look is the Chief's own turn in its chat: through the relay it too may only read Gmail and Google
 // Calendar and write a few reply drafts, so nothing it reads can make it send, accept or delete anything.
 import { connectorCallsIn, isReadOnlyTool, KNOWN_READ_SLUGS } from "../shared/outbound.ts";
 import type { RuntimeEvent } from "../shared/runtime-events.ts";
-import type { ProviderAdapter, SendTurnInput } from "./contracts.ts";
+import type { ProviderAdapter } from "./contracts.ts";
 import type { DecisionRow } from "./decision-log.ts";
 import { recordsText } from "./records-block.ts";
 import type { RoutineRun } from "./routines.ts";
@@ -31,9 +27,6 @@ export const READ_AND_DRAFT_PARTS: ReadonlySet<string> = new Set(["user-profile"
 /** The integrations a read-and-draft run keeps: OpenMausBot's own tools (fenced by route), the connected apps (fenced
  * by call) and the engine's hooks. */
 export const READ_AND_DRAFT_TOOLS: ReadonlySet<string> = new Set(["agents", "composio", "hooks"]);
-/** A card's update run keeps the bot's own MCP servers too, each behind a read-only gate. */
-const OWN_TOOLS: ReadonlySet<string> = new Set([...READ_AND_DRAFT_TOOLS, "custom", "mcpApps", "customResultBudgets"]);
-type Integrations = NonNullable<SendTurnInput["integrations"]>;
 
 export const READ_AND_DRAFT_REFUSAL = "This work reads and drafts only: OpenMausBot refused this. Do not try another way.";
 const RULE = "read-and-draft";
@@ -57,8 +50,7 @@ export const DRAFT_TOOL = "GMAIL_CREATE_EMAIL_DRAFT";
 const OTHER_RECIPIENTS = ["cc", "bcc", "extra_recipients", "recipients"] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
-const isRead = (slug: string): boolean => KNOWN_READ_SLUGS.has(slug) || isReadOnlyTool(slug);
-const mayRead = (slug: string): boolean => READ_APPS.some((app) => slug.startsWith(app)) && isRead(slug);
+const mayRead = (slug: string): boolean => READ_APPS.some((app) => slug.startsWith(app)) && (KNOWN_READ_SLUGS.has(slug) || isReadOnlyTool(slug));
 
 export interface ReadAndDraftDeps {
   /** The routine run this conversation belongs to, if any. */
@@ -76,8 +68,6 @@ export interface ReadAndDraftDeps {
   wroteDrafts?(botId: string, count: number): void;
   /** One more of OpenMausBot's own routes this conversation's run may reach ("POST /api/internal/…"). */
   mayReach?(threadId: string, route: string): boolean;
-  /** This conversation's run reads with its bot's own tools too: a panel card's own update run. */
-  readsOwnTools?(threadId: string): boolean;
 }
 
 export interface DraftReply { threadId: string; to?: string }
@@ -93,7 +83,7 @@ export function draftReply(args: unknown): DraftReply | null {
 
 /** The first app tool of a relay frame a read-and-draft run may not run, or null when it only reads, drafts as allowed or
  * describes tools. Initialize, list and notification frames carry no tool. */
-export function refusedConnectorCall(frame: unknown, draft: (reply: DraftReply) => boolean, anyApp = false): string | null {
+export function refusedConnectorCall(frame: unknown, draft: (reply: DraftReply) => boolean): string | null {
   if (!isRecord(frame) || frame.method !== "tools/call") return null;
   const call = isRecord(frame.params) ? frame.params : {};
   if (typeof call.name !== "string" || !call.name) return "tools/call";
@@ -101,7 +91,7 @@ export function refusedConnectorCall(frame: unknown, draft: (reply: DraftReply) 
   const calls = connectorCallsIn(call.name, call.arguments);
   if (!calls.length) return call.name;
   for (const one of calls) {
-    if (anyApp ? isRead(one.slug) : mayRead(one.slug)) continue;
+    if (mayRead(one.slug)) continue;
     const reply = one.slug === DRAFT_TOOL ? draftReply(one.arguments) : null;
     if (!reply || !draft(reply)) return one.slug;
   }
@@ -147,28 +137,6 @@ export function createReadAndDraft(deps: ReadAndDraftDeps) {
   };
   /** This conversation is a read-and-draft run's own, finished or not. */
   const confines = (threadId: string): boolean => runOf(threadId) !== null;
-  /** The bot's own servers a card's update run mounted, behind read-only gates, by conversation. */
-  const ownServers = new Map<string, ReadonlySet<string>>();
-  const readsOwn = (threadId: string): boolean => confines(threadId) && deps.readsOwnTools?.(threadId) === true;
-
-  /** Leaves a confined run only the tools it keeps. */
-  function confine(threadId: string, integrations: Integrations): void {
-    for (const other of ownServers.keys()) if (!readsOwn(other)) ownServers.delete(other);
-    const own = readsOwn(threadId);
-    for (const key of Object.keys(integrations) as Array<keyof Integrations>) if (!(own ? OWN_TOOLS : READ_AND_DRAFT_TOOLS).has(key)) delete integrations[key];
-    if (own && integrations.custom) {
-      integrations.customReadOnly = true;
-      ownServers.set(threadId, new Set(Object.keys(integrations.custom)));
-    } else {
-      ownServers.delete(threadId);
-    }
-  }
-  /** A call to a tool of a server `confine` put behind a read-only gate. */
-  const ownRead = (event: RequestOpened): boolean => {
-    const server = event.requestType === "question" ? undefined : /^mcp__([\w-]+)__[\w.-]+$/.exec(event.tool ?? "")?.[1];
-    return server !== undefined && readsOwn(event.threadId) && ownServers.get(event.threadId)?.has(server) === true;
-  };
-
   const refuse = (bot: Pick<Bot, "id" | "name">, threadId: string, tool: string): true => {
     deps.decide({ threadId, botId: bot.id, botName: bot.name, tool, decision: "auto-denied", source: "routine", rule: RULE });
     return true;
@@ -178,19 +146,6 @@ export function createReadAndDraft(deps: ReadAndDraftDeps) {
   function answers(event: RequestOpened, asker: Bot, say: Say): boolean {
     if (!confines(event.threadId)) return false;
     const adapter = deps.adapter(event.providerInstanceId ?? asker.modelSelection.instanceId);
-    if (ownRead(event)) {
-      deps.decide({ threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name, tool: event.tool, summary: event.summary, decision: "auto-approved", source: "routine", rule: RULE });
-      void (async () => {
-        try {
-          if (event.requestId === undefined || !adapter) throw new Error("no request to answer");
-          if (await adapter.respondToRequest(event.threadId, event.requestId, { behavior: "allow" }) === "unavailable") throw new Error("nobody took the answer");
-        } catch {
-          if (event.turnId && !deps.stale(event)) await adapter?.interruptTurn(event.threadId, event.turnId).catch(() => {});
-        }
-        if (!deps.stale(event)) deps.release(event.threadId);
-      })().catch(() => console.error("[read-and-draft] Could not answer a request."));
-      return true;
-    }
     say({ role: "bot", kind: "activity", tool: { name: `Refused (reads and drafts only): ${event.summary.slice(0, 120)}`, ok: false } });
     deps.decide({ threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name, tool: event.tool, summary: event.summary, decision: "auto-denied", source: "routine", rule: RULE });
     const decision = { behavior: event.requestType === "question" ? "answer" as const : "deny" as const, message: READ_AND_DRAFT_REFUSAL };
@@ -222,17 +177,14 @@ export function createReadAndDraft(deps: ReadAndDraftDeps) {
       const ok = run ? run.checkKey !== undefined && deps.mayDraft(run.checkKey, reply.threadId, reply.to) : looking!.draft(reply);
       if (ok) drafts.push(reply);
       return ok;
-    }, run !== null && readsOwn(threadId));
+    });
     if (refused !== null) return refuse(bot, threadId, refused);
     if (run) for (const reply of drafts) deps.drafted(run.checkKey!, reply.threadId);
     if (drafts.length) deps.wroteDrafts?.(bot.id, drafts.length);
     return false;
   }
 
-  /** The bot's own MCP servers are mounted in this conversation: it is no confined run's, or a card's update run's. */
-  const keepsOwnServers = (threadId: string): boolean => !confines(threadId) || readsOwn(threadId);
-
-  return { confines, confine, keepsOwnServers, answers, refusesRoute, refusesConnectorCall };
+  return { confines, answers, refusesRoute, refusesConnectorCall };
 }
 
 export type ReadAndDraft = ReturnType<typeof createReadAndDraft>;

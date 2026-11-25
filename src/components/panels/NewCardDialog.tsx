@@ -282,9 +282,6 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
               {t("panels.card.waiting")}
             </p>
           )}
-          {draftCard?.updateAccess === "bot" && draftCard.botId === botId && (
-            <p data-panel-access className="text-[12px] leading-4 text-ink-tertiary">{t("panels.access.bot")}</p>
-          )}
           {!tested && <p className="text-[12px] leading-4 text-ink-tertiary">{t("panels.new.changedSinceTest")}</p>}
         </section>
       )}

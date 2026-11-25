@@ -61,7 +61,6 @@ let suggestions: Record<string, PanelSuggestion[]> = {};
 let estimates: Record<string, PanelEstimate> = {};
 let keepRefusal: { error: string; errorKey?: string } | null = null;
 let testRefusal: { error: string; errorKey?: string } | null = null;
-let draftAccess: PanelCard["updateAccess"];
 const calls: Array<{ method: string; path: string; body?: unknown }> = [];
 let host: HTMLDivElement;
 let root: Root;
@@ -86,7 +85,7 @@ function server(path: string, method: string, body: Record<string, unknown> | un
   }
   if (parts[2] === "new" && testRefusal) return reply(testRefusal, 409);
   if (parts[2] === "new") {
-    const made = card({ id: "draft1", key: "orders-by-hour", title: (body!.title as string) || "Orders by hour", size: body!.size as PanelCard["size"], botId: body!.botId as string, widget: undefined, draft: true, position: 9, ...(draftAccess ? { updateAccess: draftAccess } : {}) });
+    const made = card({ id: "draft1", key: "orders-by-hour", title: (body!.title as string) || "Orders by hour", size: body!.size as PanelCard["size"], botId: body!.botId as string, widget: undefined, draft: true, position: 9 });
     panel.cards.push(made);
     return reply({ panel, card: made, routineId: "r9" }, 202);
   }
@@ -120,7 +119,6 @@ beforeEach(async () => {
   estimates = {};
   keepRefusal = null;
   testRefusal = null;
-  draftAccess = undefined;
   blocks = [{ threadId: "t7", messageId: "m3", botId: "nova", title: "Weekly signups", at: ago(30), text: "312 this week" }];
   panels = [
     {
@@ -416,29 +414,6 @@ describe("New card", () => {
     expect(dialog.querySelector('[role="alert"]')?.textContent).toBe("Este painel já tem 4 cartões de teste esperando. Tente de novo em alguns minutos.");
   });
 
-  it("says under the preview when the bot updates with its usual access, and only for the bot it was tested with", async () => {
-    draftAccess = "bot";
-    const dialog = await open();
-    type(dialog.querySelector("textarea")!, "Orders per hour today");
-    expect(dialog.querySelector("[data-panel-access]")).toBeNull();
-    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
-    await settle();
-    expect(dialog.querySelector("[data-panel-access]")?.textContent).toBe("This bot updates it with its usual access (its AI has no read-only mode).");
-    choose([...dialog.querySelectorAll("select")].find((item) => item.getAttribute("aria-label") === "Bot that keeps it")!, "nova");
-    await settle();
-    expect(dialog.querySelector("[data-panel-access]")).toBeNull();
-  });
-
-  it("says nothing about access when the update runs fenced", async () => {
-    draftAccess = "fenced";
-    const dialog = await open();
-    type(dialog.querySelector("textarea")!, "Orders per hour today");
-    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
-    await settle();
-    expect(dialog.querySelector("[data-panel-new-preview] [data-panel-card]")).not.toBeNull();
-    expect(dialog.querySelector("[data-panel-access]")).toBeNull();
-  });
-
   it("pins a block a bot already posted in a chat", async () => {
     const dialog = await open();
     act(() => (dialog.querySelector("[data-panel-new-pin]") as HTMLButtonElement).click());
@@ -570,15 +545,7 @@ describe("the card's side panel", () => {
     expect(items[2]).toContain("Asked: show it as bars");
     expect(items[2]).not.toContain("$");
     expect(items[3]).toContain("The last update brought no new data");
-    expect(side.querySelector("[data-panel-access]")).toBeNull();
     expect(calls.some((call) => call.path === "/api/panels/p1/cards/c1/history")).toBe(true);
-  });
-
-  it("says when the bot updates the card with its usual access", async () => {
-    Object.assign(panels[0]!.cards[0]!, { routineId: "own", schedule: "hour", updateAccess: "bot" });
-    await (await import("@/lib/i18n")).loadLocale("pt-br");
-    const side = await openCard("c1");
-    expect(side.querySelector("[data-panel-access]")?.textContent).toBe("Este bot atualiza com o acesso normal dele (o motor não tem modo só leitura).");
   });
 
   it("refreshes now, sends a change, clears the alert, removes with Undo, and closes on Escape", async () => {

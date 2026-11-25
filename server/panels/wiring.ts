@@ -31,13 +31,11 @@ export interface PanelsDeps {
   /** The person's time zone; UTC without it. */
   timeZone?(): string;
   /** Tells the person something about a bot's card (a changed card they asked to hear about, an alert). */
-  notice?(botId: string, text: string): void;
+  notice?(botId: string, line: (language: string | undefined) => string): void;
   /** The chats whose widgets can be pinned. */
   chats?: PanelChats;
   /** What a bot is for, for New widget's suggestions. */
   bot?(botId: string): SuggestionBot | null;
-  /** Whether this bot's engine runs a read-and-draft routine inside the fence; without it, every engine does. */
-  fenced?(botId: string): boolean;
   /** Another turn of a routine run in its own conversation, which the run's rules still hold. */
   continueRun?(run: RoutineRun, threadId: string, text: string): Promise<unknown>;
   /** A turn runs or settles in this conversation. */
@@ -57,7 +55,7 @@ export function createPanels(deps: PanelsDeps) {
   const routines = () => deps.routines?.() ?? null;
   const timeZone = () => deps.timeZone?.() || "UTC";
   const state = createPanelRunState({ dataDir: deps.dataDir });
-  const cards = createPanelCards({ store, history, state, enabled: deps.enabled, routines, timeZone, ...(deps.notice ? { notice: deps.notice } : {}), ...(deps.fenced ? { fenced: deps.fenced } : {}) });
+  const cards = createPanelCards({ store, history, state, enabled: deps.enabled, routines, timeZone, ...(deps.notice ? { notice: deps.notice } : {}) });
   const automations = createPanelAutomations({
     store, enabled: deps.enabled, routines, timeZone,
     sees: (auth, botId) => auth.scopes.includes("admin") || deps.levelOf(auth, botId) !== "none",
@@ -104,11 +102,9 @@ export function createPanels(deps: PanelsDeps) {
   };
   /** A card's own update run may reach its card's update route, which takes only its own card, once. */
   const mayReach = (threadId: string, route: string): boolean => route === CARD_UPDATE_ROUTE && cards.ownRun(threadId) !== null;
-  /** A card's own update run reads with its bot's own tools, each read-only (read-and-draft.ts). */
-  const readsOwnTools = (threadId: string): boolean => cards.ownRun(threadId) !== null;
   const sweeper = setInterval(() => { if (deps.enabled()) cards.sweep(); }, Math.min(PANEL_LIMITS.draftMs / 6, 600_000));
   sweeper.unref?.();
-  return { store, routes, toolRoutes, runNote, runChanged, runRefusal: cards.runRefusal, remindRun, quiet: cards.owns, mayReach, readsOwnTools, close: () => clearInterval(sweeper) };
+  return { store, routes, toolRoutes, runNote, runChanged, runRefusal: cards.runRefusal, remindRun, quiet: cards.owns, mayReach, close: () => clearInterval(sweeper) };
 }
 
 export type Panels = ReturnType<typeof createPanels>;

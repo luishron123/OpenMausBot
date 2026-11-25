@@ -1083,12 +1083,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       }
       for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServers)) {
         if (!canUseMcpServer(turn.toolScope, name)) { delete mcpServers[name]; continue; }
-        const readOnly = turn.integrations?.customReadOnly === true && botOwned.has(name);
-        let gated: ReturnType<typeof gateServer> = null;
-        try {
-          gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment), apps: appMountFor(name, turn), readOnly });
-        } catch (error) { if (!readOnly) throw error; }
-        if (readOnly && !gated) { delete mcpServers[name]; continue; }
+        const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment), apps: appMountFor(name, turn) });
         if (gated) mcpServers[name] = { ...gated, ...((mcpServers[name] as { alwaysLoad?: unknown })?.alwaysLoad === true ? { alwaysLoad: true } : {}) };
       }
       allowed.splice(0, allowed.length, ...allowed.filter((name) => Object.hasOwn(mcpServers, name.slice("mcp__".length).split("__")[0]!)));

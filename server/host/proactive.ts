@@ -88,7 +88,6 @@ export interface ProactiveDeps {
   /** A new Cloud's first look, confined like a read-and-draft run. */
   look?: ReadAndDraftDeps["look"];
   mayReach?: ReadAndDraftDeps["mayReach"];
-  readsOwnTools?: ReadAndDraftDeps["readsOwnTools"];
   morning?: MorningDeps;
 }
 
@@ -188,7 +187,7 @@ export function createProactive(deps: ProactiveDeps) {
     adapter: (instanceId) => deps.registry.get(instanceId)?.adapter,
     stale: deps.stale, decide: deps.decide, release: deps.release,
     mayDraft: checks.mayDraft, drafted: checks.drafted,
-    ...(deps.look ? { look: deps.look } : {}), ...(deps.mayReach ? { mayReach: deps.mayReach } : {}), ...(deps.readsOwnTools ? { readsOwnTools: deps.readsOwnTools } : {}),
+    ...(deps.look ? { look: deps.look } : {}), ...(deps.mayReach ? { mayReach: deps.mayReach } : {}),
     wroteDrafts: (botId, count) => { if (botId === owner()?.id) deps.counted?.("drafted", count); },
   });
 

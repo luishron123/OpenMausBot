@@ -65,7 +65,7 @@ function fakeRoutines() {
   return { manager, routines, runs };
 }
 
-type ServeOptions = { messages?: Record<string, PinnableMessage[]>; dataDir?: string; fake?: ReturnType<typeof fakeRoutines> } & Pick<PanelsDeps, "fenced" | "continueRun" | "threadBusy">;
+type ServeOptions = { messages?: Record<string, PinnableMessage[]>; dataDir?: string; fake?: ReturnType<typeof fakeRoutines> } & Pick<PanelsDeps, "continueRun" | "threadBusy">;
 
 async function serve(options: ServeOptions = {}) {
   const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "omb-panels-cards-"));
@@ -82,9 +82,9 @@ async function serve(options: ServeOptions = {}) {
   const panels = createPanels({
     dataDir, enabled: () => true, levelOf: (_auth, botId) => levels[botId] ?? "none", broadcast: () => {},
     routines: () => fake.manager, personStarted: (_auth, run) => started.push(run.id), timeZone: () => "America/Sao_Paulo",
-    notice: (botId, text) => notices.push({ botId, text }), chats,
+    notice: (botId, line) => notices.push({ botId, text: line("en") }), chats,
     bot: (botId) => (botId === "scout" ? { name: "Scout", title: "Sales analyst", description: "Watches the Shopify store. Reports daily." } : null),
-    ...(options.fenced ? { fenced: options.fenced } : {}), ...(options.continueRun ? { continueRun: options.continueRun } : {}), ...(options.threadBusy ? { threadBusy: options.threadBusy } : {}),
+    ...(options.continueRun ? { continueRun: options.continueRun } : {}), ...(options.threadBusy ? { threadBusy: options.threadBusy } : {}),
   });
   closers.push(panels.close);
   const server = createServer(async (req, res) => {
@@ -448,47 +448,34 @@ it("suggests cards from the bot's automations first, then from what the bot is f
   expect((await harness.api("/api/panels/suggestions?botId=hidden")).status).toBe(404);
 });
 
-it("makes a card's own routine read-only, keeps its answer out of every chat, and runs it at the bot's own access on an engine the fence does not hold", async () => {
-  const fencedBots = new Set(["scout"]);
-  const harness = await serve({ fenced: (botId) => fencedBots.has(botId) });
+it("runs a card's own routine at its bot's usual access, keeps its answer out of every chat, and lets it reach only its card", async () => {
+  const harness = await serve();
   const panelId = await salesPanel(harness);
   await harness.tool("set-card", { panel_id: "daily-sales", card_key: "revenue", title: "Revenue", widget: widget("$1"), prompt: "Revenue", schedule: "hour" });
   const own = harness.routines[0]!;
-  expect(own.access).toBe("read-and-draft");
+  expect(own.access).toBeUndefined();
   const linked = harness.manager.create({ name: "Central report", prompt: "p", botId: "scout", schedule: { type: "interval", everyMinutes: 60 }, panelId, cardKey: "revenue" } as RoutineInput);
 
   const run = harness.manager.runNow(own.id)!;
   expect(harness.panels.runRefusal(run)).toBeNull();
+  expect(run.access).toBeUndefined();
   expect(harness.panels.quiet(run)).toBe(true);
   expect(harness.panels.mayReach(run.threadId!, "POST /api/internal/panels/update-card")).toBe(true);
   expect(harness.panels.mayReach(run.threadId!, "POST /api/internal/panels/set-card")).toBe(false);
   expect(harness.panels.mayReach("chat-scout", "POST /api/internal/panels/update-card")).toBe(false);
   const other = harness.manager.runNow(linked.id)!;
   expect([harness.panels.runRefusal(other), harness.panels.quiet(other)]).toEqual([null, false]);
-  expect(linked.access).toBeUndefined();
 
-  delete own.access;
+  // A routine an earlier test build made read-only runs at the bot's access from now on.
+  own.access = "read-and-draft";
   const older = harness.manager.runNow(own.id)!;
-  expect(harness.panels.runRefusal(older)).toBe(NOT_FENCED_FAILURE);
-  expect(own.access).toBe("read-and-draft");
+  expect(harness.panels.runRefusal(older)).toBeNull();
+  expect(older.access).toBeUndefined();
+  expect(own.access).toBeUndefined();
+  expect((await harness.api(`/api/panels/${panelId}`)).body.panel.cards[0]).not.toHaveProperty("updateAccess");
 
-  const shownCard = async () => (await harness.api(`/api/panels/${panelId}`)).body.panel.cards[0];
-  expect((await shownCard()).updateAccess).toBe("fenced");
-  fencedBots.delete("scout");
-  expect((await shownCard()).updateAccess).toBe("bot");
-  const unfenced = harness.manager.runNow(own.id)!;
-  expect(unfenced.access).toBe("read-and-draft");
-  expect(harness.panels.runRefusal(unfenced)).toBeNull();
-  expect(unfenced.access).toBeUndefined();
-  expect(own.access).toBe("read-and-draft");
-  expect(harness.panels.quiet(unfenced)).toBe(true);
-  expect(harness.panels.readsOwnTools(unfenced.threadId!)).toBe(true);
-  expect(harness.panels.readsOwnTools(other.threadId!)).toBe(false);
-
-  harness.end(unfenced, "completed");
+  harness.end(older, "completed");
   expect(harness.store.get(panelId)!.cards[0]).toMatchObject({ status: "failed", failure: NO_UPDATE_FAILURE, failureCode: "no_update" });
-  const stored = JSON.parse(readFileSync(join(harness.dataDir, "panels.json"), "utf8")) as { panels: Array<{ cards: object[] }> };
-  expect(stored.panels[0]!.cards[0]).not.toHaveProperty("updateAccess");
 });
 
 it("never counts a refusal of an older card routine toward the pause", async () => {
