@@ -1,7 +1,7 @@
 {
   "default": {
-    "bytes": 61780,
-    "sha256": "5353e3480141af03546a70926574ff3111efff3d9171497264a081aa61cd6e0b",
+    "bytes": 64276,
+    "sha256": "eebc8cf17d8522dae9073279803fd60634d51fb454184c932604012c1ff91091",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -16,6 +16,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -61,8 +65,8 @@
     ]
   },
   "voice": {
-    "bytes": 62561,
-    "sha256": "c0a7e4a6f4c449bfd38295de5c5916ccc2742edb645158b4b7a81e06383b7ce4",
+    "bytes": 65057,
+    "sha256": "29ccc99a080df9d94a518113281fe5c36ac63f2e013d7d1a0abd384a4634914b",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -77,6 +81,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -123,8 +131,8 @@
     ]
   },
   "shared": {
-    "bytes": 64045,
-    "sha256": "83fee17adbf6e3fd0c9902b3949606016b18b5c20187dcda96bc69a2b9120d09",
+    "bytes": 66541,
+    "sha256": "cdf69854e030c7ce254ed881ca22735a47770bbb5b00fe1cab39462535ce7eb4",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -141,6 +149,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -186,8 +198,8 @@
     ]
   },
   "shared+voice": {
-    "bytes": 64826,
-    "sha256": "ce561a1dfaef6be8194696833f765b002552778468462529c78d305ca6e54690",
+    "bytes": 67322,
+    "sha256": "0710af6858f3d52480a1b604b325b79ca7e35339c01a62920d967dd64500e80d",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -204,6 +216,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -250,8 +266,8 @@
     ]
   },
   "skills": {
-    "bytes": 64101,
-    "sha256": "0160213db9032f21882dc39b401ffe1fb21dda54199f95f1531d1571dada1e2f",
+    "bytes": 66597,
+    "sha256": "27ed16beacc4b8351bf3f2ad45515d7831a029ddc735d7dc690be3ecdee71cd7",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -266,6 +282,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -313,8 +333,8 @@
     ]
   },
   "skills+voice": {
-    "bytes": 64882,
-    "sha256": "800c931994abae759bc15ab5ca830a8a6e6be80f5d2eebf8361a6f89ad14626c",
+    "bytes": 67378,
+    "sha256": "5838b98382477de71d20d8650fd8af1f9ebd518a60ae9468930c6831581a3bb6",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -329,6 +349,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -377,8 +401,8 @@
     ]
   },
   "skills+shared": {
-    "bytes": 66366,
-    "sha256": "5d7009e528e0d4cb00606397b6b63a1de22369f34be95e47d3fccbeaecde2813",
+    "bytes": 68862,
+    "sha256": "f3207792ad530df30d6c70373572e281962bfbd648760c5f288611d0af0b4b07",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -395,6 +419,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -442,8 +470,8 @@
     ]
   },
   "skills+shared+voice": {
-    "bytes": 67147,
-    "sha256": "c5f5f299fdbfcf00c047a39d2b041b5ed23bb7a61017ac005fa9927beb70a23d",
+    "bytes": 69643,
+    "sha256": "8af2df3ac2b73c4cbe2ff3cd56ae09377143b1d06b6abec226cea026d50255e2",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -460,6 +488,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -508,8 +540,8 @@
     ]
   },
   "non-chief": {
-    "bytes": 53232,
-    "sha256": "4ba546f1959718024a9d678eafa74f5ecf8cf45c1a41c6d1db33f997482048d5",
+    "bytes": 55728,
+    "sha256": "a130f089fc61486fc674747c06a6f932f071d116011a3399e0466b6b16f33a4e",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -524,6 +556,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -562,8 +598,8 @@
     ]
   },
   "voice+non-chief": {
-    "bytes": 54013,
-    "sha256": "36249970141a6011c49bda3361f452535d8ff753fcd423c08522ac76ed8aed3c",
+    "bytes": 56509,
+    "sha256": "bea4d173b09f7417a4c0577f91e54eae700c359432732d375015fbfe906668c9",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -578,6 +614,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -617,8 +657,8 @@
     ]
   },
   "shared+non-chief": {
-    "bytes": 55497,
-    "sha256": "d10510cbb5d0fabc7aaef9957b5381522ac111333f49de334450028d1c8ed427",
+    "bytes": 57993,
+    "sha256": "554a50f963e13fed389a839a1c114b5efdbe8840b6e6d0d8341ebf35d1ed370c",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -635,6 +675,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -673,8 +717,8 @@
     ]
   },
   "shared+voice+non-chief": {
-    "bytes": 56278,
-    "sha256": "e0d62e2fb532aee3098214ebd300b1e074a2aec18b3b87d88f5f5da987a037b2",
+    "bytes": 58774,
+    "sha256": "de37fa193843a3782e85c1265a4a015ade9fb1cf35c0ce969f961d0794892495",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -691,6 +735,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -730,8 +778,8 @@
     ]
   },
   "skills+non-chief": {
-    "bytes": 55553,
-    "sha256": "5d2597438c2458d5022cac328cbe131e1d7e0100f16534a5954291c052a7fcec",
+    "bytes": 58049,
+    "sha256": "f49e75f95226a82ac9cf7bcc0de185e89ec5e941456da21c3ddda487631f0f07",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -746,6 +794,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -786,8 +838,8 @@
     ]
   },
   "skills+voice+non-chief": {
-    "bytes": 56334,
-    "sha256": "5a3c6e314f4a87b3ecc648235ecf006234126abe853eb2fb12088d058bdf8015",
+    "bytes": 58830,
+    "sha256": "7f067f9e18553ec6cb80713812444a1b333e3b45f24a8f9b7526563b53e59739",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -802,6 +854,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -843,8 +899,8 @@
     ]
   },
   "skills+shared+non-chief": {
-    "bytes": 57818,
-    "sha256": "730a87897f3e29eb56d0701be4a91b865784083054f88724fbc3ca0432023aee",
+    "bytes": 60314,
+    "sha256": "4bb625e703835eabd09bf6c342e67b0dd358f274a07b5f18b01265a8aaac71df",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -861,6 +917,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -901,8 +961,8 @@
     ]
   },
   "skills+shared+voice+non-chief": {
-    "bytes": 58599,
-    "sha256": "4a3fc1361cd73cfc0f38efde9bc05d91674ccaaecb2721a43a948c750f90b1e9",
+    "bytes": 61095,
+    "sha256": "1ba9b921f7d6bc45f30539c7ba1a3268a421eb9ac2e0968e9d055f358217a0dd",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -919,6 +979,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -960,8 +1024,8 @@
     ]
   },
   "skills+shared+voice+cloud-home": {
-    "bytes": 66903,
-    "sha256": "07f381781a3cbfa8dbb9d097bb2c75f859540b4381cc4d024fb687166de26b66",
+    "bytes": 69399,
+    "sha256": "ed6df18a99427a466e322dbf02bf5faef768baeea2a9adf8ee71e2bb4250d54b",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -978,6 +1042,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1026,8 +1094,8 @@
     ]
   },
   "skills+shared+voice+non-chief+cloud-home": {
-    "bytes": 58355,
-    "sha256": "046a03225d28d71c57ae5d492808a2f4d14753e13b9830fc80c7c147e0710b33",
+    "bytes": 60851,
+    "sha256": "c2f7fbe855b4a896c9b3b04b402c1175a6fe9b0ba3bff122fb132f254cfafcf8",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -1044,6 +1112,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1085,8 +1157,8 @@
     ]
   },
   "skills+shared+voice+x": {
-    "bytes": 70986,
-    "sha256": "e65cfaf1222643add8a1aa10cbcfd8dce4c557655656dad1a403e8bc445e8b47",
+    "bytes": 73482,
+    "sha256": "0add96c0ccfb15ffd0709673c88472681b523e93c73a88b485ce42472ccddd43",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -1103,6 +1175,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1155,8 +1231,8 @@
     ]
   },
   "skills+shared+voice+x+team": {
-    "bytes": 70986,
-    "sha256": "e65cfaf1222643add8a1aa10cbcfd8dce4c557655656dad1a403e8bc445e8b47",
+    "bytes": 73482,
+    "sha256": "0add96c0ccfb15ffd0709673c88472681b523e93c73a88b485ce42472ccddd43",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -1173,6 +1249,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1225,8 +1305,8 @@
     ]
   },
   "skills+shared+voice+x+team+images": {
-    "bytes": 72933,
-    "sha256": "6b6b7d35f7c99593183ec3e5e698e78079e93bb28b2e1e1436e26d70d7c1cfd7",
+    "bytes": 75429,
+    "sha256": "176e4b36b78222a1d67e4334e2fe271c9152d0815cbc566af7aff3eba27d632d",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -1243,6 +1323,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1297,8 +1381,8 @@
     ]
   },
   "default+legacy-switches": {
-    "bytes": 61780,
-    "sha256": "5353e3480141af03546a70926574ff3111efff3d9171497264a081aa61cd6e0b",
+    "bytes": 64276,
+    "sha256": "eebc8cf17d8522dae9073279803fd60634d51fb454184c932604012c1ff91091",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1313,6 +1397,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1358,8 +1446,8 @@
     ]
   },
   "default+mausbot": {
-    "bytes": 62431,
-    "sha256": "b05b5035504324b64d9c60c9a4050270c8a9a71db55631e7f009776b6ea88d27",
+    "bytes": 64927,
+    "sha256": "a6767a863bdec9e1cc34d2b2af77bda9ff1e72bad8d00d70cc7c0b328b9b79c3",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1374,6 +1462,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1421,8 +1513,8 @@
     ]
   },
   "skills+shared+voice+mausbot": {
-    "bytes": 67798,
-    "sha256": "5387028d23473fb0e1f1e5506a3f0577e8ad933e1cd813e34117130746ae1abd",
+    "bytes": 70294,
+    "sha256": "895942a817542d38e745f410342eec47a5c586d9a2d941a30aca936cc2859449",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -1439,6 +1531,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1489,8 +1585,8 @@
     ]
   },
   "default+no-computer-pick": {
-    "bytes": 60568,
-    "sha256": "75e59e2d235337d12355d02d61b95d93d9ec74b18670437fe92245511aceda69",
+    "bytes": 63064,
+    "sha256": "5f7dbbb5d7dc04f3132bdd6c2c585f3797361359d1ff3b5bfda2258f2697f90f",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1504,6 +1600,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1549,8 +1649,8 @@
     ]
   },
   "default+room": {
-    "bytes": 57128,
-    "sha256": "787e8410ad2ab4f9a4bd54602f5330724dd405161fcd2f83ad1a11977471f909",
+    "bytes": 59624,
+    "sha256": "9ab7a4a77b269c9da940eb0212a4a931236017792131e43b081f59e392bd239b",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1563,6 +1663,10 @@
       "close_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "list_models",
       "vm_exec",
@@ -1603,8 +1707,8 @@
     ]
   },
   "non-chief+room": {
-    "bytes": 48580,
-    "sha256": "01766e477e23dc5804654ddcd066e993531bdef2af25e312ecb53b88bc7c0771",
+    "bytes": 51076,
+    "sha256": "83e34b4f08de2bc4f4d96de163afcd1d833d6eaeeb4db85c1add4d5f2d52ed9c",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1617,6 +1721,10 @@
       "close_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "list_models",
       "vm_exec",
@@ -1650,8 +1758,8 @@
     ]
   },
   "default+images": {
-    "bytes": 63727,
-    "sha256": "7f0f54a9820180dbb8807a92cda57f5e4e6ffbca5d8cd14e85cb37c730e68715",
+    "bytes": 66223,
+    "sha256": "350970b54704e72720a3a07337542f4e352252ef65ba5a272062671821cc0e4e",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1666,6 +1774,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1713,8 +1825,8 @@
     ]
   },
   "skills+shared+voice+x+team+images+hosting": {
-    "bytes": 74796,
-    "sha256": "8e0d1588e714acbf4660a60b934171badab4b6dd7be9e4aca346c4070ebd65d8",
+    "bytes": 77292,
+    "sha256": "57f0a4612ae5d8358fadbeabd3009b69555adc02377429888bd24526c98837d0",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -1731,6 +1843,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1787,8 +1903,8 @@
     ]
   },
   "default+hosting": {
-    "bytes": 63643,
-    "sha256": "a70b4cefd101f9d84f826b2bb01f48dfab0dcdf59d949303132a1f3f872a4a90",
+    "bytes": 66139,
+    "sha256": "be30fec6728cd393d684994019d7c5f1cf9233a0c9ea3b939e50a29e757079ff",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1803,6 +1919,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -1850,8 +1970,8 @@
     ]
   },
   "default+tools-off": {
-    "bytes": 57463,
-    "sha256": "047fcbe315f9f968dd5b1f35a1ba11aefa8816bfa95daba6aacf80050de4c8db",
+    "bytes": 59959,
+    "sha256": "84a01e70d2fea459d55b9f9a9382ebda22a28e9fb66fefd8685ca29ebac177aa",
     "tools": [
       "tool_result_read",
       "list_room_targets",
@@ -1866,6 +1986,10 @@
       "rename_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
