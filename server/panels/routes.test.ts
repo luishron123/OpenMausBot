@@ -118,6 +118,30 @@ it("scrubs a card put back by Undo like a widget a bot sends, and refuses one th
   expect((await api("/api/panels/restore", send("POST", { panel: { id: "pnl_x" } }))).status).toBe(400);
 });
 
+it("masks a failure's reason in a card or panel put back by Undo", async () => {
+  const { api, store } = await serve();
+  const { panel, card } = seed(store, "scout");
+  const key = "sk-ant-api03-" + "b".repeat(40);
+  const bearer = "Bearer " + "eyJhbGciOiJIUzI1NiJ9." + "e".repeat(40);
+  const failure = `Shopify refused ${key} with Authorization: ${bearer}`;
+  await api(`/api/panels/${panel.id}/cards/${card.id}`, send("DELETE"));
+  const cardBack = await api(`/api/panels/${panel.id}/cards/restore`, send("POST", { card: { ...card, status: "failed", failure, failedAt: card.updatedAt } }));
+  expect(cardBack.status).toBe(200);
+  expect(store.get(panel.id)!.cards[0]).toMatchObject({ status: "failed", failure: expect.stringContaining("Shopify refused") });
+  for (const text of [JSON.stringify(cardBack.body), JSON.stringify(store.get(panel.id))]) {
+    expect(text).not.toContain(key);
+    expect(text).not.toContain("e".repeat(40));
+  }
+  const gone = await api(`/api/panels/${panel.id}`, send("DELETE"));
+  const sneaky = { ...gone.body.panel, cards: gone.body.panel.cards.map((one: Record<string, unknown>) => ({ ...one, failure })) };
+  const back = await api("/api/panels/restore", send("POST", { panel: sneaky }));
+  expect(back.status).toBe(200);
+  for (const text of [JSON.stringify(back.body), JSON.stringify(store.get(panel.id))]) {
+    expect(text).not.toContain(key);
+    expect(text).not.toContain("e".repeat(40));
+  }
+});
+
 it("does not let a person put back a panel for a bot they cannot chat with", async () => {
   const { api, store } = await serve();
   const { panel } = seed(store, "viewer");

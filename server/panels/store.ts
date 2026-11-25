@@ -58,9 +58,12 @@ export function parsePanel(candidate: unknown): Panel | null {
   return { ...stored, cards } as Panel;
 }
 
+/** A card that parses, its failure reason masked: one saved before the mask, or brought back by an Undo, never shows a secret. */
 export function parseCard(candidate: unknown): PanelCard | null {
   const card = cardSchema.safeParse(candidate);
-  return card.success ? (card.data as PanelCard) : null;
+  if (!card.success) return null;
+  const parsed = card.data as PanelCard;
+  return parsed.failure === undefined ? parsed : { ...parsed, failure: clip(redactSecretsInText(parsed.failure), PANEL_LIMITS.failure) };
 }
 
 type Read = { panels: Panel[]; writable: true } | { panels: Panel[]; writable: false; why: string };

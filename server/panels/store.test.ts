@@ -75,6 +75,21 @@ describe("panels.json", () => {
     expect(read.panels[0]).toMatchObject({ lane: "top", cards: [{ key: "revenue" }] });
   });
 
+  it("masks a failure's reason saved before failures were masked when it reads the file", () => {
+    const { store, file } = storeIn();
+    const { panel } = made(store.create({ title: "Daily sales", createdBy: author }));
+    made(store.setCard(panel.id, { key: "revenue", title: "Revenue", content: content("$4,210"), botId: "scout" }));
+    const key = "sk-ant-api03-" + "f".repeat(40);
+    const bearer = "Bearer " + "eyJhbGciOiJIUzI1NiJ9." + "g".repeat(40);
+    const onDisk = JSON.parse(readFileSync(file, "utf8"));
+    Object.assign(onDisk.panels[0].cards[0], { status: "failed", failure: `Shopify refused ${key}, ${bearer}`, failedAt: onDisk.panels[0].cards[0].updatedAt });
+    writeFileSync(file, JSON.stringify(onDisk));
+    const read = JSON.stringify(readPanelsFile(file));
+    expect(read).toContain("Shopify refused");
+    expect(read).not.toContain(key);
+    expect(read).not.toContain("g".repeat(40));
+  });
+
   it("never writes over a file it cannot read whole", () => {
     const { store, file } = storeIn();
     for (const text of ["{not json", JSON.stringify({ version: 2, panels: [] })]) {
