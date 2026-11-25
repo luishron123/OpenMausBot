@@ -1,7 +1,7 @@
 export const SOUND_EVENTS = ["send", "reply", "done", "attention", "approved", "error", "stop", "mention", "discard", "record"] as const;
 export type SoundEvent = (typeof SOUND_EVENTS)[number];
 
-export const SOUND_STYLES = ["click", "glass", "retro", "tap", "breeze", "chip"] as const;
+export const SOUND_STYLES = ["click", "glass", "retro", "tap", "breeze"] as const;
 export type SoundStyle = (typeof SOUND_STYLES)[number];
 
 export type SoundChoice = SoundStyle | "off";
@@ -57,9 +57,7 @@ export function stepFrequency(step: number): number {
 interface Voice {
   /** Partials as [frequency ratio, level], with an optional decay of their own in seconds for a strike that fades first. */
   partials: Array<[number, number] | [number, number, number]>;
-  wave: "sine" | "square" | "pulse";
-  /** Share of each cycle a pulse wave spends high. */
-  duty?: number;
+  wave: "sine" | "square";
   attack: number;
   /** Time constant of the decay after the attack, in seconds. */
   decay: number;
@@ -67,7 +65,7 @@ interface Voice {
   /** Extra time after the last note for the room to ring out. */
   tail: number;
   room?: { delays: number[]; feedback: number; mix: number };
-  /** Steps of the amplitude envelope; a coarse envelope is what makes a chip voice. */
+  /** Steps of the amplitude envelope; a coarse envelope gives a retro voice its steps. */
   levels?: number;
   /** Cut-off of a one-pole low-pass that softens the square edges, in hertz. */
   soften?: number;
@@ -90,7 +88,6 @@ export const VOICES: Record<SoundStyle, Voice> = {
     partials: [[1, 1], [2.01, 0.06], [4.07, 0.1, 0.05]], wave: "sine", attack: 0.006, decay: 0.16, release: 0.06, tail: 0.28,
     room: { delays: [0.0187, 0.0259, 0.0341, 0.0427], feedback: 0.56, mix: 0.34 },
   },
-  chip: { partials: [[1, 1]], wave: "pulse", duty: 0.25, attack: 0.001, decay: 0.07, release: 0.01, tail: 0.02, levels: 6, soften: 3600 },
 };
 
 interface Tone {
@@ -130,10 +127,6 @@ const breezeDry: Voice = { ...BREEZE, attack: 0.002, decay: 0.012, release: 0.00
 const breezeSend: Voice = { ...BREEZE, decay: 0.014, release: 0.02, tail: 0.1, room: { delays: [0.0187, 0.0259, 0.0341], feedback: 0.38, mix: 0.26 } };
 const breezeLow: Voice = { ...BREEZE, decay: 0.06, release: 0.03, tail: 0.06, room: { delays: [0.0187, 0.0259], feedback: 0.3, mix: 0.2 } };
 
-const CHIP = VOICES.chip;
-const chipShort: Voice = { ...CHIP, decay: 0.03, release: 0.006, tail: 0 };
-const chipSend: Voice = { ...CHIP, decay: 0.012, release: 0.005, tail: 0 };
-const chipLow: Voice = { ...CHIP, decay: 0.03, release: 0.008, tail: 0, levels: 4, soften: 1600 };
 
 /** The styles with phrases of their own; each event keeps its role and its place among the others in loudness. */
 const STYLE_PHRASES: Partial<Record<SoundStyle, Record<SoundCue, StylePhrase>>> = {
@@ -163,25 +156,6 @@ const STYLE_PHRASES: Partial<Record<SoundStyle, Record<SoundCue, StylePhrase>>> 
     record: { tones: [tone(2490, 0, 0.006)], level: 0.46, limit: 0.04, voice: breezeDry },
     discard: { tones: [tone(554, 0, 0.02)], level: 0.34, limit: 0.06, voice: breezeDry },
   },
-  chip: {
-    send: { tones: [tone(988, 0, 0.022), tone(1319, 0.045, 0.026)], level: 0.5, limit: 0.08, voice: chipSend },
-    stop: thud(131, CHIP, 0.55),
-    reply: {
-      tones: [tone(659, 0, 0.045), tone(988, 0.06, 0.05), tone(988, 0.13, 0.025, { gain: 0.45 }), tone(988, 0.175, 0.02, { gain: 0.2 })],
-      level: 0.7, limit: 0.25, voice: CHIP,
-    },
-    done: {
-      tones: [tone(659, 0, 0.045), tone(988, 0.06, 0.05), tone(988, 0.13, 0.025, { gain: 0.45 }), tone(988, 0.175, 0.02, { gain: 0.2 })],
-      level: 0.7, limit: 0.25, voice: CHIP,
-    },
-    preview: { tones: [tone(659, 0, 0.04), tone(831, 0.05, 0.04), tone(988, 0.1, 0.04), tone(1319, 0.15, 0.07)], level: 0.84, limit: 0.3, voice: CHIP },
-    attention: { tones: [tone(1319, 0, 0.04), tone(988, 0.06, 0.04), tone(1319, 0.12, 0.04), tone(988, 0.18, 0.06)], level: 0.84, limit: 0.32, voice: CHIP },
-    approved: { tones: [tone(988, 0, 0.035), tone(1480, 0.05, 0.08)], level: 0.72, limit: 0.2, voice: CHIP },
-    mention: { tones: [tone(1661, 0, 0.025), tone(1976, 0.04, 0.025), tone(1661, 0.08, 0.05)], level: 0.78, limit: 0.2, voice: chipShort },
-    error: { tones: [tone(494, 0, 0.07), tone(247, 0.09, 0.11)], level: 0.72, limit: 0.3, voice: CHIP },
-    record: { tones: [tone(1976, 0, 0.012)], level: 0.46, limit: 0.03, voice: chipShort },
-    discard: { tones: [tone(330, 0, 0.02)], level: 0.34, limit: 0.05, voice: chipLow },
-  },
 };
 
 /** The notes, voice, loudness and longest length one cue gets in one style. */
@@ -203,11 +177,6 @@ function envelope(voice: Voice, t: number, hold: number): number {
 }
 
 function oscillator(voice: Voice, phase: number): number {
-  if (voice.wave === "pulse") {
-    const duty = voice.duty ?? 0.5;
-    const cycle = phase / (2 * Math.PI);
-    return (cycle - Math.floor(cycle) < duty ? 1 : -1) - (2 * duty - 1);
-  }
   const value = Math.sin(phase);
   return voice.wave === "sine" ? value : value >= 0 ? 1 : -1;
 }

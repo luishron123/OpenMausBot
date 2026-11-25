@@ -5,7 +5,7 @@ import { phraseOf, renderSound, SOUND_EVENTS, SOUND_PEAK, SOUND_STYLES, stepFreq
 const RATES = [44_100, 48_000];
 const CUES: SoundCue[] = [...SOUND_EVENTS, "preview"];
 const cases = CUES.flatMap((cue) => SOUND_STYLES.map((style) => [cue, style] as const));
-const NEW_STYLES = ["tap", "breeze", "chip"] as const;
+const NEW_STYLES = ["tap", "breeze"] as const;
 const dB = (ratio: number) => 20 * Math.log10(ratio);
 
 function peakOf(samples: Float32Array, from = 0, to = samples.length) {
