@@ -387,3 +387,68 @@ describe("what each card is doing", () => {
     expect(order().map((id) => host.querySelector(`[data-panel-card="${id}"]`)!.getAttribute("data-panel-card-state"))).toEqual(["updating", "ok"]);
   });
 });
+
+describe("the card's side panel", () => {
+  const openCard = async (id: string) => {
+    await show();
+    act(() => (host.querySelector(`[data-panel-card="${id}"] [data-panel-card-open]`) as HTMLButtonElement).click());
+    await settle();
+    return host.querySelector(`[data-panel-side="${id}"]`) as HTMLElement;
+  };
+
+  it("shows the card large with its automation, alert, sources and last updates with cost", async () => {
+    Object.assign(panels[0]!.cards[0]!, { routineId: "own", schedule: "hour", alert: "orders fall below 30", alertActive: { text: "Only 22 orders", at: ago(5) }, sources: ["Shopify orders", "https://example.com/report"], prompt: "Orders today" });
+    panels[0]!.automations = [automation({ routineId: "own", nextRunAt: new Date(NOW + 30 * 60_000).toISOString() })];
+    history = [
+      { at: ago(12), status: "ok", summary: "Orders went from 40 to 42", costUsd: 0.034, tokens: 12_400 },
+      { at: ago(80), status: "failed", failure: "Shopify didn't answer", costUsd: 0.004 },
+      { at: ago(140), status: "ok", change: "show it as bars" },
+    ];
+    const side = await openCard("c1");
+    expect(side.getAttribute("aria-label")).toBe("Orders today, details");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Close");
+    expect(side.querySelector("[data-panel-card]")?.textContent).toContain("42 orders");
+    expect(side.querySelector("[data-panel-side-automation]")?.textContent).toMatch(/Scout · every hour · next today/);
+    expect(side.querySelector("[data-panel-side-alert]")?.textContent).toContain("Only 22 orders");
+    expect(side.textContent).toContain("Alerts you when orders fall below 30");
+    expect(side.querySelector("[data-panel-side-sources] a")?.getAttribute("href")).toBe("https://example.com/report");
+    const items = [...side.querySelectorAll("[data-panel-history-item]")].map((item) => item.textContent);
+    expect(items[0]).toContain("Orders went from 40 to 42");
+    expect(items[0]).toContain("$0.03 · 12.4K tokens");
+    expect(items[1]).toContain("Shopify didn't answer");
+    expect(items[1]).toContain("under $0.01");
+    expect(items[2]).toContain("Asked: show it as bars");
+    expect(items[2]).not.toContain("$");
+    expect(calls.some((call) => call.path === "/api/panels/p1/cards/c1/history")).toBe(true);
+  });
+
+  it("refreshes now, sends a change, clears the alert, removes with Undo, and closes on Escape", async () => {
+    panels[0]!.cards[0]!.alertActive = { text: "Only 22 orders", at: ago(5) };
+    let side = await openCard("c1");
+    act(() => (side.querySelector('[data-panel-side-action="refresh"]') as HTMLButtonElement).click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/c1/refresh")).toHaveLength(1);
+    type(side.querySelector("textarea")!, "compare with last week");
+    act(() => (side.querySelector('[data-panel-side-action="change"]') as HTMLButtonElement).click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/c1/change").map((call) => call.body)).toEqual([{ text: "compare with last week" }]);
+    expect(side.textContent).toContain("Sent. Scout is working on it.");
+    act(() => button("Clear")!.click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/c1/alert/clear")).toHaveLength(1);
+
+    act(() => side.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    await settle();
+    expect(host.querySelector("[data-panel-side]")).toBeNull();
+
+    side = await openCard("c2");
+    act(() => (side.querySelector('[data-panel-side-action="remove"]') as HTMLButtonElement).click());
+    await settle();
+    expect(calls.filter((call) => call.method === "DELETE").map((call) => call.path)).toEqual(["/api/panels/p1/cards/c2"]);
+    expect(host.querySelector("[data-panel-side]")).toBeNull();
+    expect(order()).toEqual(["c1", "c3"]);
+    act(() => button("Undo")!.click());
+    await settle();
+    expect(order()).toEqual(["c1", "c2", "c3"]);
+  });
+});

@@ -130,7 +130,7 @@ export type CardMover = {
   dragging: boolean;
 };
 
-export function PanelCard({ card, state, bot, cadence, organizing = false, bare = false, mover, onResize, onRemove, onOpen, onResolve }: {
+export function PanelCard({ card, state, bot, cadence, organizing = false, bare = false, selected = false, mover, onResize, onRemove, onOpen, onResolve }: {
   card: Card;
   state: PanelCardState;
   bot?: Pick<Bot, "id" | "name"> & Partial<Bot>;
@@ -138,6 +138,8 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
   organizing?: boolean;
   /** A preview: no menu, no size or span of its own. */
   bare?: boolean;
+  /** Open in the side panel. */
+  selected?: boolean;
   mover?: CardMover;
   onResize: (size: PanelCardSize) => void;
   onRemove: () => void;
@@ -182,7 +184,7 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
       data-panel-card-dragging={mover?.dragging || undefined}
       className={cn(
         "relative flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card transition-opacity motion-reduce:transition-none",
-        organizing ? "border-hairline" : "border-hairline/40",
+        selected ? "border-accent" : organizing ? "border-hairline" : "border-hairline/40",
         mover?.dragging && "opacity-60",
         !bare && PANEL_CARD_SPAN[card.size],
       )}
@@ -193,6 +195,7 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
             <button
               type="button"
               data-panel-card-open
+              aria-expanded={selected}
               onClick={onOpen}
               className="max-w-full truncate rounded text-start hover:text-accent-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus after:absolute after:inset-0 after:content-['']"
             >

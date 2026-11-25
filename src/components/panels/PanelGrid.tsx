@@ -32,14 +32,45 @@ const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every
 
 type Drag = { id: string; pointerId: number; start: string[] };
 
-export function CardGrid({ panel, bots, organizing, onAsk, onOpen }: {
+export type CardRemoval = { removed: Card | null; problem: string; remove: (card: Card) => Promise<void>; undo: () => Promise<void> };
+
+/** Removing a card with Undo, shared by the grid and the card's side panel so the Undo shows wherever it was removed. */
+export function useCardRemoval(panelId: string): CardRemoval {
+  const [removed, setRemoved] = useState<Card | null>(null);
+  const [problem, setProblem] = useState("");
+  const remove = async (card: Card) => {
+    setProblem("");
+    try {
+      const result = await removeCard(panelId, card.id);
+      setRemoved(result.card);
+    } catch (cause) {
+      setProblem(errorText(cause, t("panels.card.changeFailed")));
+    }
+  };
+  const undo = async () => {
+    if (!removed) return;
+    setProblem("");
+    try {
+      await restoreCard(panelId, removed);
+      setRemoved(null);
+    } catch (cause) {
+      setProblem(errorText(cause, t("panels.undoFailed")));
+    }
+  };
+  return { removed, problem, remove, undo };
+}
+
+export function CardGrid({ panel, bots, organizing, removal, openId, onAsk, onOpen }: {
   panel: Panel;
   bots: ReadonlyArray<Bot>;
   organizing: boolean;
+  removal: CardRemoval;
+  /** The card shown in the side panel. */
+  openId?: string;
   onAsk?: () => void;
   onOpen?: (card: Card) => void;
 }) {
-  const [removed, setRemoved] = useState<Card | null>(null);
+  const { removed, remove, undo } = removal;
   const [problem, setProblem] = useState("");
   const [order, setOrder] = useState<string[] | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -64,24 +95,6 @@ export function CardGrid({ panel, bots, organizing, onAsk, onOpen }: {
   const resize = async (card: Card, size: PanelCardSize) => {
     setProblem("");
     try { await resizeCard(panel.id, card.id, size); } catch (cause) { setProblem(errorText(cause, t("panels.card.changeFailed"))); }
-  };
-  const remove = async (card: Card) => {
-    setProblem("");
-    try {
-      const result = await removeCard(panel.id, card.id);
-      setRemoved(result.card);
-    } catch (cause) {
-      setProblem(errorText(cause, t("panels.card.changeFailed")));
-    }
-  };
-  const undo = async () => {
-    if (!removed) return;
-    try {
-      await restoreCard(panel.id, removed);
-      setRemoved(null);
-    } catch (cause) {
-      setProblem(errorText(cause, t("panels.undoFailed")));
-    }
   };
   const resolve = async (card: Card) => {
     setProblem("");
@@ -157,7 +170,7 @@ export function CardGrid({ panel, bots, organizing, onAsk, onOpen }: {
           <button type="button" onClick={() => void undo()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent-text hover:bg-ink/[0.06]">{t("common.undo")}</button>
         </div>
       )}
-      {problem && <p role="alert" className="mb-3 text-[13px] text-danger">{problem}</p>}
+      {(problem || removal.problem) && <p role="alert" className="mb-3 text-[13px] text-danger">{problem || removal.problem}</p>}
       <p aria-live="polite" className="sr-only">{said}</p>
       {cards.length === 0 ? (
         <section data-panel-empty className="flex flex-col items-center px-6 py-16 text-center">
@@ -176,6 +189,7 @@ export function CardGrid({ panel, bots, organizing, onAsk, onOpen }: {
                 bot={bots.find((bot) => bot.id === card.botId)}
                 cadence={cardCadence(panel, card)}
                 organizing={organizing}
+                selected={card.id === openId}
                 mover={organizing ? mover(card) : undefined}
                 onResize={(size) => void resize(card, size)}
                 onRemove={() => void remove(card)}
