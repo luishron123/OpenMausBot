@@ -228,6 +228,21 @@ it("lets a card's own run update only its card, once, and refuses every other pa
   expect(harness.store.get(panelId)!.cards.find((one) => one.key === "revenue")!.status).toBe("ok");
 });
 
+it("keeps a card that its own run updated ok when the ended run is reported again", async () => {
+  const harness = await serve();
+  const panelId = await salesPanel(harness);
+  await harness.tool("set-card", { panel_id: "daily-sales", card_key: "revenue", title: "Revenue", prompt: "Today's revenue", schedule: "hour" });
+  const run = harness.runs[0]!;
+  expect((await harness.tool("update-card", { panel_id: "daily-sales", card_key: "revenue", widget: widget("$4,210"), summary: "Up 3%" }, run.threadId!)).status).toBe(200);
+  harness.end(run, "completed", 0.01);
+  harness.end(run, "completed", 0.01);
+  harness.panels.runChanged({ ...run, seenAt: Date.now() } as RoutineRun);
+  const card = harness.store.get(panelId)!.cards.find((one) => one.key === "revenue")!;
+  expect(card.status).toBe("ok");
+  expect(card.failureCode).toBeUndefined();
+  expect((await harness.api(`/api/panels/${panelId}/cards/${card.id}/history`)).body.updates).toHaveLength(1);
+});
+
 it("fails a card whose own run ended without an update, and pauses its routine after five in a row", async () => {
   const harness = await serve();
   const panelId = await salesPanel(harness);

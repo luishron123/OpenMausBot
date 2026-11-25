@@ -19,6 +19,8 @@ interface RunState {
   asked: Record<string, string>;
   /** Routines a card's removal paused, by card id, so its Undo turns them back on. */
   paused: Record<string, string[]>;
+  /** Card runs whose end was already settled: the routine manager reports an ended run again (its cost, its seen mark). */
+  settled: string[];
 }
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((one): one is string => typeof one === "string") : []);
@@ -32,9 +34,9 @@ export function createPanelRunState(options: { dataDir: string }) {
       if (parsed.version !== 1) throw new Error("another version");
       const asked = Object.fromEntries(Object.entries(record(parsed.asked)).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
       const paused = Object.fromEntries(Object.entries(record(parsed.paused)).map(([cardId, ids]) => [cardId, strings(ids)]));
-      return { updated: strings(parsed.updated), reminded: strings(parsed.reminded), asked, paused };
+      return { updated: strings(parsed.updated), reminded: strings(parsed.reminded), asked, paused, settled: strings(parsed.settled) };
     } catch {
-      return { updated: [], reminded: [], asked: {}, paused: {} };
+      return { updated: [], reminded: [], asked: {}, paused: {}, settled: [] };
     }
   };
   const change = <T>(apply: (state: RunState) => T): T => {
@@ -42,6 +44,7 @@ export function createPanelRunState(options: { dataDir: string }) {
     const result = apply(state);
     state.updated = state.updated.slice(-KEEP);
     state.reminded = state.reminded.slice(-KEEP);
+    state.settled = state.settled.slice(-KEEP);
     state.paused = Object.fromEntries(Object.entries(state.paused).slice(-KEEP));
     mkdirSync(options.dataDir, { recursive: true });
     writeFileAtomic(file, JSON.stringify({ version: 1, ...state }), { mode: 0o600 });
@@ -61,15 +64,18 @@ export function createPanelRunState(options: { dataDir: string }) {
       set: (routineId: string, text: string): void => change((state) => { state.asked[routineId] = text; }),
       delete: (routineId: string): void => { if (read().asked[routineId] !== undefined) change((state) => { delete state.asked[routineId]; }); },
     },
-    /** Whether the run updated its card; what the run left here is cleared. */
-    ended(runId: string, routineId: string): boolean {
+    /** Whether the run updated its card; what the run left here is cleared. With settle, the end is also kept, and a
+     * later report of the same ended run reads null: already settled. */
+    ended(runId: string, routineId: string, options: { settle?: boolean } = {}): boolean | null {
       const now = read();
-      if (!now.updated.includes(runId) && !now.reminded.includes(runId) && now.asked[routineId] === undefined) return false;
+      if (options.settle && now.settled.includes(runId)) return null;
+      if (!options.settle && !now.updated.includes(runId) && !now.reminded.includes(runId) && now.asked[routineId] === undefined) return false;
       return change((state) => {
         const did = state.updated.includes(runId);
         state.updated = state.updated.filter((one) => one !== runId);
         state.reminded = state.reminded.filter((one) => one !== runId);
         delete state.asked[routineId];
+        if (options.settle) state.settled.push(runId);
         return did;
       });
     },

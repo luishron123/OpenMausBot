@@ -216,8 +216,8 @@ export function createPanelCards(deps: PanelCardsDeps) {
   function runEnded(run: RoutineRun): { panelId: string; botId: string } | null {
     if (GOING.has(run.status) || !deps.enabled()) return null;
     const found = cardOf(run.routineId);
-    const did = state.ended(run.id, run.routineId);
-    if (!found) return null;
+    const did = state.ended(run.id, run.routineId, { settle: found !== null });
+    if (!found || did === null) return null;
     const { panel, card } = found;
     if (did) {
       if (typeof run.cost === "number" && run.cost > 0) history.costed(card.id, run.id, run.cost);
