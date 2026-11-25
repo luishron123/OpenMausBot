@@ -1,10 +1,11 @@
 import { useCallback, useId, useMemo, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { CircleAlert, GripVertical, LoaderCircle, MoreHorizontal, Trash2, X } from "lucide-react";
+import { Bell, CircleAlert, CirclePause, GripVertical, LoaderCircle, MoreHorizontal, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { nextWhen } from "@/lib/automations";
 import { relativeTime } from "@/lib/memory";
-import { PANEL_CARD_SIZES, type PanelAutomation, type PanelCard as Card, type PanelCardSize } from "@/lib/panels";
+import { PANEL_CARD_SIZES, cardAutomation, type Panel, type PanelAutomation, type PanelCard as Card, type PanelCardSize, type PanelSchedule } from "@/lib/panels";
 import type { Bot } from "@/state/store";
 import { BotAvatar } from "../Avatar";
 import { widgetFields, widgetInitialValues, type WidgetRoot } from "../../../shared/widget";
@@ -12,11 +13,15 @@ import { SidebarPopoverMenu, type SidebarMenuItem } from "../SidebarPopoverMenu"
 import { WidgetBody } from "../widget/WidgetBody";
 import { WIDGET_COMPACT_BELOW, WidgetFormProvider, type WidgetForm } from "../widget/WidgetControls";
 
-export type PanelCardState = "ok" | "updating" | "failed" | "waiting";
+export type PanelCardState = "ok" | "updating" | "failed" | "waiting" | "building" | "held";
 
+/** Failed and held say why the card is stuck, so they come before a run in progress; a card with no widget yet whose
+ * first run is going is building. */
 export function panelCardState(card: Card, updating: boolean): PanelCardState {
   if (card.status === "failed") return "failed";
-  if (updating) return "updating";
+  if (card.held) return "held";
+  if (updating) return card.widget ? "updating" : "building";
+  if (card.building && !card.widget) return "building";
   return card.widget ? "ok" : "waiting";
 }
 
@@ -54,6 +59,20 @@ export function cadenceText(automation: PanelAutomation | undefined): string {
     default: return "";
   }
 }
+
+const SCHEDULE_TEXT: Record<PanelSchedule, "panels.schedule.half" | "panels.schedule.hour" | "panels.schedule.day" | "panels.schedule.week" | "panels.schedule.manual"> = {
+  half: "panels.schedule.half",
+  hour: "panels.schedule.hour",
+  day: "panels.schedule.day",
+  week: "panels.schedule.week",
+  manual: "panels.schedule.manual",
+};
+
+export const scheduleText = (schedule: PanelSchedule): string => t(SCHEDULE_TEXT[schedule]);
+
+/** The card's own schedule when it has one, else the cadence of the automation that keeps it. */
+export const cardCadence = (panel: Panel, card: Card): string =>
+  card.schedule ? scheduleText(card.schedule) : cadenceText(cardAutomation(panel, card));
 
 const NOTHING = (): void => {};
 
@@ -111,7 +130,7 @@ export type CardMover = {
   dragging: boolean;
 };
 
-export function PanelCard({ card, state, bot, cadence, organizing = false, bare = false, mover, onResize, onRemove, onOpen }: {
+export function PanelCard({ card, state, bot, cadence, organizing = false, bare = false, mover, onResize, onRemove, onOpen, onResolve }: {
   card: Card;
   state: PanelCardState;
   bot?: Pick<Bot, "id" | "name"> & Partial<Bot>;
@@ -123,7 +142,16 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
   onResize: (size: PanelCardSize) => void;
   onRemove: () => void;
   onOpen?: () => void;
+  /** Turns a paused automation back on and runs it; the button shows while it is pending. */
+  onResolve?: () => Promise<void>;
 }) {
+  const [resolving, setResolving] = useState(false);
+  const resolve = () => {
+    if (!onResolve || resolving) return;
+    setResolving(true);
+    void onResolve().finally(() => setResolving(false));
+  };
+  const heldUntil = card.held?.until ? Date.parse(card.held.until) : NaN;
   const failedAt = card.failedAt ? Date.parse(card.failedAt) : NaN;
   const updatedAt = Date.parse(card.updatedAt);
   const menu: SidebarMenuItem[] = [
@@ -142,11 +170,13 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
       ? t("panels.card.failedAt", { when: relativeTime(failedAt) })
       : state === "waiting"
         ? t("panels.card.waitingShort")
-        : Number.isFinite(updatedAt) ? relativeTime(updatedAt) : "";
+        : state === "building"
+          ? t("panels.card.buildingShort")
+          : Number.isFinite(updatedAt) ? relativeTime(updatedAt) : "";
   return (
     <article
       aria-label={card.title}
-      aria-busy={state === "updating" || undefined}
+      aria-busy={state === "updating" || state === "building" || undefined}
       data-panel-card={card.id}
       data-panel-card-state={state}
       data-panel-card-dragging={mover?.dragging || undefined}
@@ -230,17 +260,50 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
           <div className={cn("transition-opacity motion-reduce:transition-none", state === "failed" && "opacity-[0.55]")}>
             <CardWidget root={card.widget} name={card.title} />
           </div>
+        ) : state === "building" ? (
+          <p data-panel-card-building className="flex items-center gap-2 px-4 pb-4 text-[13px] leading-[18px] text-ink-secondary">
+            <LoaderCircle aria-hidden="true" size={14} className="shrink-0 animate-spin motion-reduce:animate-none" />
+            {t("panels.card.building")}
+          </p>
         ) : (
           <p className="px-4 pb-4 text-[13px] leading-[18px] text-ink-tertiary">
             {state === "failed" ? t("panels.card.noData") : t("panels.card.waiting")}
           </p>
         )}
       </div>
-      {state === "failed" && card.failure && (
-        <p className="mx-4 mb-1 flex items-start gap-2 border-t border-hairline/40 pt-3 text-[13px] leading-[18px] text-danger">
-          <CircleAlert aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
-          <span dir="auto" className="min-w-0 break-words">{card.failure}</span>
+      {card.alertActive && (
+        <p data-panel-card-alert className="mx-4 mb-1 flex items-start gap-2 rounded-lg bg-warning/10 px-2.5 py-2 text-[13px] leading-[18px] text-ink">
+          <Bell aria-hidden="true" size={14} className="mt-0.5 shrink-0 text-warning" />
+          <span dir="auto" className="min-w-0 break-words">{card.alertActive.text}</span>
         </p>
+      )}
+      {state === "held" && card.held && (
+        <p data-panel-card-held className="mx-4 mb-1 flex items-start gap-2 border-t border-hairline/40 pt-3 text-[13px] leading-[18px] text-ink-secondary">
+          <CirclePause aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
+          <span dir="auto" className="min-w-0 break-words">
+            {Number.isFinite(heldUntil)
+              ? t("panels.card.heldUntil", { reason: card.held.reason, when: nextWhen(heldUntil) })
+              : t("panels.card.held", { reason: card.held.reason })}
+          </span>
+        </p>
+      )}
+      {state === "failed" && (card.failure || onResolve) && (
+        <div className="mx-4 mb-1 flex items-start gap-2 border-t border-hairline/40 pt-3 text-[13px] leading-[18px] text-danger">
+          <CircleAlert aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
+          <span dir="auto" className="min-w-0 flex-1 break-words">{card.failure ?? t("panels.card.failedShort")}</span>
+          {onResolve && !organizing && (
+            <button
+              type="button"
+              data-panel-card-resolve
+              onClick={resolve}
+              disabled={resolving}
+              aria-busy={resolving || undefined}
+              className="ui-button ui-button-sm relative z-10 -mt-0.5 shrink-0"
+            >
+              {resolving ? t("panels.card.resolving") : t("panels.card.resolve")}
+            </button>
+          )}
+        </div>
       )}
       <PanelCardFooter bot={bot} when={when} cadence={cadence} updating={state === "updating"} />
     </article>

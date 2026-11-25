@@ -6,14 +6,15 @@ import { listenLiveFrames } from "@/lib/live-events";
 import { api, ApiError } from "@/state/api";
 import {
   PANELS_PATH,
-  type Panel, type PanelAutomation, type PanelCard, type PanelCardSize, type PanelNewCardRequest, type PanelPinnableBlock,
-  type PanelsChangedFrame, type PanelSummary, type PanelVisibility,
+  type Panel, type PanelAlert, type PanelAutomation, type PanelCard, type PanelCardPatchRequest, type PanelCardSize, type PanelCardUpdate,
+  type PanelEstimate, type PanelNewCardRequest, type PanelPinnableBlock, type PanelSchedule, type PanelsChangedFrame, type PanelSuggestion,
+  type PanelSummary, type PanelVisibility,
 } from "../../shared/panels";
 
-export { PANEL_CADENCES, PANEL_CARD_FORMATS, PANEL_CARD_SIZES } from "../../shared/panels";
+export { PANEL_CADENCES, PANEL_CARD_FORMATS, PANEL_CARD_SIZES, PANEL_LIMITS, PANEL_SCHEDULES } from "../../shared/panels";
 export type {
-  Panel, PanelAutomation, PanelCadence, PanelCard, PanelCardFormat, PanelCardSize, PanelNewCardRequest, PanelPinnableBlock,
-  PanelSummary, PanelVisibility,
+  Panel, PanelAlert, PanelAutomation, PanelCadence, PanelCard, PanelCardFormat, PanelCardSize, PanelCardUpdate, PanelEstimate,
+  PanelNewCardRequest, PanelPinnableBlock, PanelSchedule, PanelSuggestion, PanelSummary, PanelThumbKind, PanelVisibility,
 } from "../../shared/panels";
 
 const CHANGED = "omb:panels-changed";
@@ -163,9 +164,16 @@ export async function refreshPanel(id: string, routineId?: string): Promise<void
 /** True while one of the panel's automations is running, so its cards are about to change. */
 export const panelUpdating = (panel: Pick<Panel, "automations">): boolean => (panel.automations ?? []).some((automation) => automation.running === true);
 
+const keeps = (automation: PanelAutomation, card: Pick<PanelCard, "key" | "routineId">) =>
+  (card.routineId !== undefined && automation.routineId === card.routineId) || (card.key !== undefined && automation.cardKey === card.key);
+
+/** An automation for the whole panel: not tied to a card key, nor any card's own. */
+const panelWide = (panel: Pick<Panel, "cards">, automation: PanelAutomation) =>
+  !automation.cardKey && !panel.cards.some((card) => card.routineId === automation.routineId);
+
 /** A card is updating while an automation that keeps it runs: its own, or one that keeps the whole panel. */
-export const cardUpdating = (panel: Pick<Panel, "automations">, card: Pick<PanelCard, "key">): boolean =>
-  (panel.automations ?? []).some((automation) => automation.running === true && (!automation.cardKey || automation.cardKey === card.key));
+export const cardUpdating = (panel: Pick<Panel, "automations" | "cards">, card: Pick<PanelCard, "key" | "routineId">): boolean =>
+  (panel.automations ?? []).some((automation) => automation.running === true && (keeps(automation, card) || panelWide(panel, automation)));
 
 export async function setPanelVisibility(id: string, visibility: PanelVisibility): Promise<Panel> {
   const { panel } = await api<{ panel: Panel }>(panelPath(id), { method: "PATCH", body: JSON.stringify({ visibility }) });
@@ -209,6 +217,53 @@ export async function pinBlock(id: string, block: { threadId: string; messageId:
 /** The automation that keeps a card: its own (by card key) first, else one that keeps the whole panel. */
 export function cardAutomation(panel: Panel, card: PanelCard): PanelAutomation | undefined {
   const automations = (panel.automations ?? []).filter((automation) => automation.enabled);
-  return (card.key ? automations.find((automation) => automation.cardKey === card.key) : undefined)
-    ?? automations.find((automation) => !automation.cardKey);
+  return automations.find((automation) => keeps(automation, card)) ?? automations.find((automation) => panelWide(panel, automation));
+}
+
+export async function changeCard(id: string, cardId: string, change: PanelCardPatchRequest): Promise<Panel> {
+  const { panel } = await api<{ panel: Panel }>(cardPath(id, cardId), { method: "PATCH", body: JSON.stringify(change) });
+  return kept(panel);
+}
+
+/** Runs the card's own automation now, a manual card's too. */
+export async function refreshCard(id: string, cardId: string): Promise<void> {
+  await api(`${cardPath(id, cardId)}/refresh`, { method: "POST", body: "{}" });
+  changed(id);
+}
+
+/** Ask for a change: a run that answers `text`, and may change what the card tracks or how it looks. */
+export async function askCardChange(id: string, cardId: string, text: string): Promise<void> {
+  await api(`${cardPath(id, cardId)}/change`, { method: "POST", body: JSON.stringify({ text }) });
+  changed(id);
+}
+
+/** Turns a paused automation back on and runs it now. */
+export async function resolveCard(id: string, cardId: string): Promise<void> {
+  await api(`${cardPath(id, cardId)}/resolve`, { method: "POST", body: "{}" });
+  changed(id);
+}
+
+export async function clearCardAlert(id: string, cardId: string): Promise<void> {
+  await api(`${cardPath(id, cardId)}/alert/clear`, { method: "POST", body: "{}" });
+  changed(id);
+}
+
+/** The card's last updates, newest first. */
+export async function cardHistory(id: string, cardId: string): Promise<PanelCardUpdate[]> {
+  const { updates } = await api<{ updates: PanelCardUpdate[] }>(`${cardPath(id, cardId)}/history`);
+  return updates ?? [];
+}
+
+export async function costEstimate(botId: string, schedule: PanelSchedule): Promise<PanelEstimate> {
+  return api<PanelEstimate>(`${PANELS_PATH}/estimate?botId=${encodeURIComponent(botId)}&schedule=${schedule}`);
+}
+
+export async function cardSuggestions(botId: string): Promise<PanelSuggestion[]> {
+  const { suggestions } = await api<{ suggestions: PanelSuggestion[] }>(`${PANELS_PATH}/suggestions?botId=${encodeURIComponent(botId)}`);
+  return suggestions ?? [];
+}
+
+export async function panelAlerts(): Promise<PanelAlert[]> {
+  const { alerts } = await api<{ alerts: PanelAlert[] }>(`${PANELS_PATH}/alerts`);
+  return alerts ?? [];
 }

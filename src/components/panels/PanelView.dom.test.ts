@@ -5,7 +5,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Panel, PanelAutomation, PanelCard, PanelPinnableBlock } from "../../../shared/panels";
+import type { Panel, PanelAutomation, PanelCard, PanelCardUpdate, PanelPinnableBlock } from "../../../shared/panels";
 import { panelSummary } from "../../../shared/panels";
 import { setLocale } from "@/lib/i18n";
 
@@ -56,6 +56,7 @@ const automation = (over: Partial<PanelAutomation> = {}): PanelAutomation => ({
 
 let panels: Panel[];
 let blocks: PanelPinnableBlock[];
+let history: PanelCardUpdate[] = [];
 const calls: Array<{ method: string; path: string; body?: unknown }> = [];
 let host: HTMLDivElement;
 let root: Root;
@@ -89,6 +90,9 @@ function server(path: string, method: string, body: Record<string, unknown> | un
   if (parts[2] === "restore") { panel.cards.push(body!.card as PanelCard); return reply({ panel }); }
   const target = panel.cards.find((item) => item.id === parts[2])!;
   if (parts[3] === "keep") { delete target.draft; return reply({ panel }); }
+  if (parts[3] === "history") return reply({ updates: history });
+  if (parts[3] === "alert") { delete target.alertActive; return reply({ panel }); }
+  if (parts[3]) return reply({}, 202);
   if (method === "PATCH") { Object.assign(target, body); return reply({ panel }); }
   panel.cards = panel.cards.filter((item) => item !== target);
   return reply({ panel, card: target });
@@ -102,6 +106,7 @@ beforeEach(async () => {
   fixture.menus.clear();
   fixture.frames.length = 0;
   calls.length = 0;
+  history = [];
   blocks = [{ threadId: "t7", messageId: "m3", botId: "nova", title: "Weekly signups", at: ago(30), text: "312 this week" }];
   panels = [
     {
@@ -348,5 +353,37 @@ describe("the six kinds of card", () => {
     expect(host.querySelector('[data-panel-card="goal"] [role="progressbar"]')).not.toBeNull();
     expect(text("checklist")).toContain("1 rejected");
     expect(text("text")).toContain("2 low stock");
+  });
+});
+
+describe("what each card is doing", () => {
+  it("shows building, on hold with when it comes back, a failure with Resolve, an alert, and the card's own schedule", async () => {
+    panels[0]!.cards = [
+      card({ id: "b", title: "New one", widget: undefined, building: true, prompt: "Orders by hour", schedule: "half" }),
+      card({ id: "h", title: "Held", position: 1, held: { reason: "usage limit reached", until: new Date(NOW + 2 * 3_600_000).toISOString() } }),
+      card({ id: "f", title: "Broken", position: 2, status: "failed", failure: "Paused after 5 failures", failedAt: ago(3), schedule: "day" }),
+      card({ id: "a", title: "Watched", position: 3, alertActive: { text: "Refunds rose 30%", at: ago(1) }, schedule: "manual" }),
+    ];
+    panels[0]!.automations = [];
+    await show();
+    const state = (id: string) => host.querySelector(`[data-panel-card="${id}"]`)!.getAttribute("data-panel-card-state");
+    expect(["b", "h", "f", "a"].map(state)).toEqual(["building", "held", "failed", "ok"]);
+    expect(host.querySelector('[data-panel-card="b"] [data-panel-card-building]')?.textContent).toBe("Building the first version…");
+    expect(host.querySelector('[data-panel-card="b"] [data-panel-card-cadence]')?.textContent).toBe("every 30 min");
+    expect(host.querySelector('[data-panel-card="h"] [data-panel-card-held]')?.textContent).toMatch(/^On hold: usage limit reached · back today/);
+    expect(host.querySelector('[data-panel-card="a"] [data-panel-card-alert]')?.textContent).toBe("Refunds rose 30%");
+    expect(host.querySelector('[data-panel-card="a"] [data-panel-card-cadence]')?.textContent).toBe("when asked");
+    const resolve = host.querySelector('[data-panel-card="f"] [data-panel-card-resolve]') as HTMLButtonElement;
+    expect(resolve.textContent).toBe("Resolve");
+    act(() => resolve.click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/f/resolve")).toHaveLength(1);
+  });
+
+  it("marks updating only the card whose own automation runs", async () => {
+    panels[0]!.cards = [card({ routineId: "own" }), card({ id: "c2", title: "Other", position: 1, routineId: "other" })];
+    panels[0]!.automations = [automation({ routineId: "own", running: true })];
+    await show();
+    expect(order().map((id) => host.querySelector(`[data-panel-card="${id}"]`)!.getAttribute("data-panel-card-state"))).toEqual(["updating", "ok"]);
   });
 });

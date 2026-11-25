@@ -3,11 +3,11 @@ import { LayoutDashboard } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import {
-  cardAutomation, cardUpdating, orderCards, removeCard, resizeCard, restoreCard,
+  cardUpdating, orderCards, removeCard, resizeCard, resolveCard, restoreCard,
   type Panel, type PanelCard as Card, type PanelCardSize,
 } from "@/lib/panels";
 import type { Bot } from "@/state/store";
-import { PanelCard, cadenceText, panelCardState, type CardMover } from "./PanelCard";
+import { PanelCard, cardCadence, panelCardState, type CardMover } from "./PanelCard";
 
 /** Grows into two columns, then four, by the page's own width (not the window's), so an open side panel counts. */
 export const PANEL_GRID = "grid auto-rows-[minmax(10rem,auto)] grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-4";
@@ -82,6 +82,10 @@ export function CardGrid({ panel, bots, organizing, onAsk, onOpen }: {
     } catch (cause) {
       setProblem(errorText(cause, t("panels.undoFailed")));
     }
+  };
+  const resolve = async (card: Card) => {
+    setProblem("");
+    try { await resolveCard(panel.id, card.id); } catch (cause) { setProblem(errorText(cause, t("panels.card.resolveFailed"))); }
   };
   const save = async (next: string[], before: string[]) => {
     setProblem("");
@@ -170,12 +174,13 @@ export function CardGrid({ panel, bots, organizing, onAsk, onOpen }: {
                 card={card}
                 state={panelCardState(card, cardUpdating(panel, card))}
                 bot={bots.find((bot) => bot.id === card.botId)}
-                cadence={cadenceText(cardAutomation(panel, card))}
+                cadence={cardCadence(panel, card)}
                 organizing={organizing}
                 mover={organizing ? mover(card) : undefined}
                 onResize={(size) => void resize(card, size)}
                 onRemove={() => void remove(card)}
                 onOpen={organizing || !onOpen ? undefined : () => onOpen(card)}
+                onResolve={() => resolve(card)}
               />
             ))}
           </div>
