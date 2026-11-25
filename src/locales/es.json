@@ -1672,6 +1672,7 @@
   "sidebar.connectionsToFinish": "Conexiones por terminar en Apps → Servidores MCP: {count}",
   "sidebar.presetsImported": "Bots preajustados añadidos a Bot nuevo: {count}",
   "sidebar.nav.teamMap": "Mapa del equipo",
+  "sidebar.nav.panels": "Paneles",
   "sidebar.nav.automations": "Automatizaciones",
   "sidebar.nav.connectedApps": "Apps conectadas",
   "sidebar.tools": "Herramientas",

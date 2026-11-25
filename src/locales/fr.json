@@ -735,6 +735,7 @@
   "sidebar.teamImportedMany": "{count} bots ajoutés · les bots et discussions existants sont conservés",
   "sidebar.connectionsToFinish": "Connexions à terminer dans Apps → MCP servers : {count}",
   "sidebar.nav.teamMap": "Carte de l'équipe",
+  "sidebar.nav.panels": "Panneaux",
   "sidebar.nav.automations": "Automatisations",
   "sidebar.nav.connectedApps": "Applications connectées",
   "sidebar.tools": "Outils",

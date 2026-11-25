@@ -1,4 +1,4 @@
-import { FolderOpen, Hamburger, LayoutGrid, Puzzle, Rocket, Search, UsersRound, X, Zap } from "lucide-react";
+import { FolderOpen, Hamburger, LayoutDashboard, LayoutGrid, Puzzle, Rocket, Search, UsersRound, X, Zap } from "lucide-react";
 
 import { useCloudFilesReady } from "@/lib/cloud-files";
 import { t } from "@/lib/i18n";
@@ -16,8 +16,15 @@ export function SidebarPhoneBar({ query, onQuery }: { query: string; onQuery: (q
   const { state, dispatch } = useStore();
   const automationsNeedYou = useAutomationsNeedYou();
   const filesReady = useCloudFilesReady();
-  const skillBurger = useFeature("skillBurger");
+  const skillBurger = useFeature("skillBurger"), panels = useFeature("panels");
   const items: SidebarMenuItem[] = [
+    ...(panels ? [{
+      key: "panels",
+      label: t("sidebar.nav.panels"),
+      icon: <LayoutDashboard size={18} />,
+      active: state.activeView === "panels",
+      onSelect: () => dispatch({ type: "showPanels" }),
+    }] : []),
     {
       key: "automations",
       label: t("sidebar.nav.automations"),

@@ -11,6 +11,7 @@ const COPY: Record<Feature, { title: LocaleKey; line: LocaleKey }> = {
   threadTabs: { title: "settings.features.threadTabs", line: "settings.features.threadTabsLine" },
   roomFeed: { title: "settings.features.roomFeed", line: "settings.features.roomFeedLine" },
   teamBoard: { title: "settings.features.teamBoard", line: "settings.features.teamBoardLine" },
+  panels: { title: "settings.features.panels", line: "settings.features.panelsLine" },
 };
 
 /** One switch kept in this place's config.json; shown once its server says it knows the switch (the board: only a Team Cloud's). */
@@ -51,6 +52,7 @@ export function FeaturesPage() {
         <FeatureRow name="threadTabs" />
         <FeatureRow name="roomFeed" />
         <FeatureRow name="teamBoard" />
+        <FeatureRow name="panels" />
       </SettingsRows>
     </SettingsGroup>
   );
