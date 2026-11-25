@@ -7,10 +7,13 @@ import { deletePanel, restorePanel, usePanelList, type Panel, type PanelSummary 
 import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
 import { BotAvatar } from "../Avatar";
 import { TOOL_PAGE_TITLE, ToolPage, ToolPageHeader } from "../ToolPageShell";
+import { PanelThumb } from "./PanelThumb";
 import { PanelView } from "./PanelView";
 
 /** A load this quick needs no placeholder; one that takes longer shows the rows' shape. */
 export const PANELS_SKELETON_AFTER_MS = 300;
+
+const alertsText = (count: number) => (count === 1 ? t("panels.list.alertsOne") : t("panels.list.alertsMany", { count }));
 
 function PanelRow({ panel, onOpen }: { panel: PanelSummary; onOpen: () => void }) {
   const bot = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === panel.createdBy.botId));
@@ -23,10 +26,15 @@ function PanelRow({ panel, onOpen }: { panel: PanelSummary; onOpen: () => void }
         onClick={onOpen}
         className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-hairline/40 bg-card px-3.5 py-3 text-start transition-colors hover:bg-raised/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus motion-reduce:transition-none"
       >
-        {bot ? <BotAvatar bot={bot} size={32} /> : <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink/[0.06] text-ink-tertiary"><LayoutDashboard size={16} /></span>}
+        <PanelThumb panel={panel} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-2">
             <bdi dir="auto" className="min-w-0 truncate text-[14px] font-semibold leading-5 text-ink">{panel.title}</bdi>
+            {(panel.alertCount ?? 0) > 0 && (
+              <span data-panel-alerts={panel.alertCount} className="size-2 shrink-0 rounded-full bg-warning" title={alertsText(panel.alertCount!)}>
+                <span className="sr-only">{alertsText(panel.alertCount!)}</span>
+              </span>
+            )}
             {panel.failedCount > 0 && (
               <span data-panel-failed className="size-2 shrink-0 rounded-full bg-danger" title={t("panels.list.failed")}>
                 <span className="sr-only">{t("panels.list.failed")}</span>
@@ -34,7 +42,13 @@ function PanelRow({ panel, onOpen }: { panel: PanelSummary; onOpen: () => void }
             )}
           </span>
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-tertiary">
-            {bot && <span className="min-w-0 truncate"><bdi dir="auto">{bot.name}</bdi><span aria-hidden="true" className="ms-1.5">·</span></span>}
+            {bot && (
+              <span className="flex min-w-0 items-center gap-1.5">
+                <BotAvatar bot={bot} size={14} />
+                <bdi dir="auto" className="min-w-0 truncate">{bot.name}</bdi>
+                <span aria-hidden="true">·</span>
+              </span>
+            )}
             <span className="shrink-0">{panel.cardCount === 1 ? t("panels.list.cardsOne") : t("panels.list.cardsMany", { count: panel.cardCount })}</span>
             {Number.isFinite(updated) && <><span aria-hidden="true">·</span><span className="shrink-0">{t("panels.updated", { when: relativeTime(updated) })}</span></>}
           </span>

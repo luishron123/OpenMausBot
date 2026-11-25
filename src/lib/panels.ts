@@ -267,3 +267,20 @@ export async function panelAlerts(): Promise<PanelAlert[]> {
   const { alerts } = await api<{ alerts: PanelAlert[] }>(`${PANELS_PATH}/alerts`);
   return alerts ?? [];
 }
+
+/** How many cards hold an alert the person has not cleared, read again whenever a panel changes; 0 while off. */
+export function usePanelAlertCount(enabled: boolean): number {
+  const [count, setCount] = useState(0);
+  const alive = useRef(true);
+  const refresh = useCallback(() => {
+    if (!enabled) return;
+    panelAlerts().then((alerts) => { if (alive.current) setCount(alerts.length); }).catch(() => undefined);
+  }, [enabled]);
+  useEffect(() => {
+    alive.current = true;
+    if (enabled) refresh(); else setCount(0);
+    return () => { alive.current = false; };
+  }, [enabled, refresh]);
+  useWhenPanelsChange(refresh);
+  return count;
+}

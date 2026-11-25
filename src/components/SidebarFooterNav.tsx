@@ -6,6 +6,7 @@ import { automationsFrom, hasUnseenProblemRun } from "@/lib/automations";
 import { cn } from "@/lib/cn";
 import { useCloudFilesReady } from "@/lib/cloud-files";
 import { t } from "@/lib/i18n";
+import { usePanelAlertCount } from "@/lib/panels";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { useFeature } from "@/lib/use-feature";
 import { useWebPanels } from "@/lib/web-panel-preferences";
@@ -129,11 +130,13 @@ export function SidebarFooterNav({
   const tone = (active: boolean) => (active ? "text-accent" : "text-ink-secondary");
   const automationsNeedYou = useAutomationsNeedYou();
   const panels = useFeature("panels");
+  const panelAlerts = usePanelAlertCount(panels);
   const panelsRow = panels && <NavRow
     id="panels"
     label={t("sidebar.nav.panels")}
     iconsOnly={iconsOnly || toolbar}
     active={state.activeView === "panels"}
+    attention={panelAlerts > 0}
     icon={(active) => <LayoutDashboard size={iconSize} className={tone(active)} />}
     onClick={() => dispatch({ type: "showPanels" })}
   />;

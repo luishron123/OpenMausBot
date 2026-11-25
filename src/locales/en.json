@@ -2627,6 +2627,8 @@
   "panels.new.alertLabel": "Alert",
   "panels.new.alertPlaceholder": "Alert me when… (optional), e.g. orders fall 20% below yesterday",
   "panels.limit.cards": "This panel already has {count} cards, the most it can hold. Remove one or add to another panel.",
+  "panels.list.alertsOne": "1 alert to see",
+  "panels.list.alertsMany": "{count} alerts to see",
   "sidebar.nav.automations": "Automations",
   "sidebar.nav.connectedApps": "Connected apps",
   "sidebar.connectApps": "Connect apps",
