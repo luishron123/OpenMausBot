@@ -170,6 +170,16 @@ describe("panel_id in the trigger tool", () => {
     expect(calls[2]!.body).toEqual({ panel_id: "daily-sales", card_key: "revenue", routine_id: "t-1" });
   });
 
+  it("links the panel when the new trigger id comes back under result", async () => {
+    const { calls, context: ctx } = context({ response: { ok: true, status: 201, body: { applied: true, result: { resultId: "t-9" }, summary: "Every day at 9:00, Scout follows: Count." } } });
+    const result = await callTool("trigger", { action: "create", when: "schedule", name: "Sales", instructions: "Count.", schedule: daily, panel_id: "daily-sales", card_key: "revenue" }, ctx);
+    expect(result.isError).toBeUndefined();
+    expect(result.text).toContain("(trigger id t-9)");
+    expect(result.text).not.toContain("did not apply");
+    expect(calls.map((call) => call.path)).toEqual(["/api/internal/panels/link", "/api/internal/trigger-requests", "/api/internal/panels/link"]);
+    expect(calls[2]!.body).toEqual({ panel_id: "daily-sales", card_key: "revenue", routine_id: "t-9" });
+  });
+
   it("links or unlinks on update without a trigger request when nothing else changes", async () => {
     const { calls, context: ctx } = context();
     await callTool("trigger", { action: "update", trigger_id: "t-1", panel_id: "" }, ctx);

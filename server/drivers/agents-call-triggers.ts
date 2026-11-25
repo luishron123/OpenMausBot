@@ -351,10 +351,16 @@ function closingWords(r: Json, action: string): string {
   return "Tell the person in one sentence what will happen.";
 }
 
+/** The id a trigger request returns, at the top or under `result`. */
+function resultIdOf(r: Json): string {
+  if (typeof r.resultId === "string") return r.resultId;
+  return jsonRecord(r.result) && typeof r.result.resultId === "string" ? r.result.resultId : "";
+}
+
 function appliedText(r: Json, done: string, action: string): ToolCallResult {
   const summary = typeof r.summary === "string" && r.summary.trim() ? `\n\n${r.summary.trim()}` : "";
   const detail = typeof r.detail === "string" && r.detail.trim() ? `\n\n${r.detail.trim()}` : "";
-  const id = typeof r.resultId === "string" ? r.resultId : jsonRecord(r.result) && typeof r.result.resultId === "string" ? r.result.resultId : "";
+  const id = resultIdOf(r);
   const attention = r.settlementPending && typeof r.message === "string" ? `\n\nNeeds attention: ${r.message}`
     : jsonRecord(r.result) && typeof r.result.message === "string" ? `\n\nNeeds attention: ${r.result.message}` : "";
   return {
@@ -394,7 +400,7 @@ async function request(body: Json, context: ToolCallContext, done: string, link?
   }
   const applied = appliedText(r, done, String(body.action ?? ""));
   if (!link) return applied;
-  const routineId = link.routine_id ?? (typeof r.resultId === "string" ? r.resultId : "");
+  const routineId = link.routine_id ?? resultIdOf(r);
   const linked = routineId
     ? await linkPanel({ ...link, routine_id: routineId }, context)
     : { text: "The panel link did not apply: no trigger id came back. Call trigger action=update with its trigger_id and panel_id.", isError: true };
