@@ -461,7 +461,7 @@
     },
     {
       "name": "create_panel",
-      "description": "Make a panel: cards you keep up to date, for numbers the person checks again. A key makes it idempotent. For a report that must stay current, also create an automation with panel_id.",
+      "description": "Make a panel of cards you keep current. A key makes it idempotent (an existing key updates title, about, visibility). For a live card give set_panel_widget a prompt and schedule, or create an automation with panel_id.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -477,6 +477,14 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
             "description": "A stable name, e.g. \"daily-sales\"."
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "shared"
+            ],
+            "description": "private: only you and its card bots see it. Default shared."
           }
         },
         "required": [
@@ -486,7 +494,7 @@
     },
     {
       "name": "set_panel_widget",
-      "description": "Add a card to a panel, or replace the one with this card_key.",
+      "description": "Add a card, or replace the one with this card_key. Send widget, prompt or both; prompt+schedule gives it its own updating automation (prompt alone builds it in a run now). Max 60 scheduled cards.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -520,18 +528,44 @@
           },
           "fallback_text": {
             "type": "string"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "What the card tracks; each update run reads it."
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "half",
+              "hour",
+              "day",
+              "week",
+              "manual"
+            ],
+            "description": "Self-update cadence, person's time zone: half=30 min, day=08:00, week=Mon 08:00, manual=on Refresh."
+          },
+          "alert": {
+            "type": "string",
+            "description": "Condition to warn the person about."
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            },
+            "description": "Names or URLs you read."
           }
         },
         "required": [
           "panel_id",
-          "title",
-          "widget"
+          "title"
         ]
       }
     },
     {
       "name": "update_panel_widget",
-      "description": "Change one card (card_id or card_key). If you could not get fresh data, send failed with the reason instead of widget; the card keeps its last content.",
+      "description": "Change one card (card_id or card_key): widget plus a one-line summary. Without fresh data send failed with the reason instead; the card keeps its content.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -571,6 +605,37 @@
           },
           "failed": {
             "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "description": "What changed."
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            },
+            "description": "Names or URLs you read."
+          },
+          "alert": {
+            "type": "string",
+            "description": "Only when the alert condition is met: one sentence for the person."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "What the card tracks; each update run reads it."
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "half",
+              "hour",
+              "day",
+              "week",
+              "manual"
+            ],
+            "description": "Self-update cadence, person's time zone: half=30 min, day=08:00, week=Mon 08:00, manual=on Refresh."
           }
         },
         "required": [

@@ -18,7 +18,7 @@ describe("the panel tools on the wire", () => {
     expect(PANEL_TOOL_DEFINITIONS.map((tool) => [tool.name, tool.inputSchema.additionalProperties, tool.inputSchema.required ?? []])).toEqual([
       ["list_panels", false, []],
       ["create_panel", false, ["title"]],
-      ["set_panel_widget", false, ["panel_id", "title", "widget"]],
+      ["set_panel_widget", false, ["panel_id", "title"]],
       ["update_panel_widget", false, ["panel_id"]],
     ]);
     expect(JSON.stringify(PANEL_TOOL_DEFINITIONS)).not.toMatch(/"(oneOf|anyOf|allOf|const|format)"/);
