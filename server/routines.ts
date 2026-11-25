@@ -65,7 +65,7 @@ export interface Routine extends RoutineTroubleCode {
   durationMinutes: number;
   timeoutMinutes?: number;
   attachments?: RoutineContextAttachment[];
-  continuity?: boolean; sameConversation?: boolean;
+  continuity?: boolean; sameConversation?: boolean; /** The panel its runs keep current, and the key of its own card there (panels/automations.ts). */ panelId?: string; cardKey?: string;
   modelSelection?: ModelSelection;
   overlap?: "skip" | "queue";
   runOnStartup?: boolean;
@@ -191,7 +191,7 @@ export interface RoutineInput {
   durationMinutes?: number;
   timeoutMinutes?: number | null;
   attachments?: RoutineContextAttachment[];
-  continuity?: boolean; sameConversation?: boolean;
+  continuity?: boolean; sameConversation?: boolean; /** null unlinks the panel. */ panelId?: string | null; cardKey?: string | null;
   modelSelection?: ModelSelection | null;
   overlap?: "skip" | "queue";
   runOnStartup?: boolean;
@@ -241,7 +241,7 @@ export interface RoutineManagerOptions {
   emit?: (payload: Record<string, unknown>) => void;
   botState: (botId: string) => "ready" | "busy" | "missing";
   /** Why this bot takes no runs now (or not `run`), in the person's words; null when it does. */ pausedText?: (botId: string, run?: RoutineRun) => string | null; /** The person paused this bot: its runs are let go quietly, not failed into To review. */ held?: (botId: string) => boolean; /** A reached usage cap (host/usage-cap-gate.ts): `capSkip` for a scheduled occurrence, which is counted on one `missed` row per cap and period and never switches the routine off; `capText` for a run already queued. */ capSkip?: (botId: string, routineId: string) => { behind: string; resetsAt: number; words(count: number): RoutineLine } | null; capText?: (botId: string, trigger: RoutineRunTrigger) => string | null;
-  goalState?: (groupId: string | undefined, coordinatorBotId: string) => "ready" | "busy" | "missing";
+  goalState?: (groupId: string | undefined, coordinatorBotId: string) => "ready" | "busy" | "missing"; /** A line added to a run's instructions for its routine, such as the panel it keeps. */ runNote?: (routine: Routine | undefined) => string | null;
   createTask: (botId: string, title: string, run?: RoutineRun) => { threadId: string } | null;
   joinConversation?: (run: RoutineRun) => string | null;
   createGoalTask?: (groupId: string, title: string) => { threadId: string } | null;
@@ -619,7 +619,7 @@ export class RoutineManager {
       durationMinutes: patch.durationMinutes ?? routine.durationMinutes,
       timeoutMinutes: Object.hasOwn(patch, "timeoutMinutes") ? patch.timeoutMinutes : routine.timeoutMinutes,
       attachments: patch.attachments ?? routine.attachments,
-      continuity: patch.continuity ?? routine.continuity, sameConversation: patch.sameConversation ?? routine.sameConversation,
+      continuity: patch.continuity ?? routine.continuity, sameConversation: patch.sameConversation ?? routine.sameConversation, panelId: Object.hasOwn(patch, "panelId") ? patch.panelId : routine.panelId, cardKey: Object.hasOwn(patch, "cardKey") ? patch.cardKey : routine.cardKey,
       modelSelection: Object.hasOwn(patch, "modelSelection") ? patch.modelSelection : routine.modelSelection,
       overlap: Object.hasOwn(patch, "overlap") ? patch.overlap : routine.overlap,
       runOnStartup: patch.runOnStartup ?? routine.runOnStartup,
@@ -650,7 +650,7 @@ export class RoutineManager {
         updatedAt: Math.max(now, routine.updatedAt + 1),
       });
       if (patch.enabled !== undefined) delete routine.heldFor;
-      for (const key of ["continuity", "sameConversation", "modelSelection", "overlap", "runOnStartup", "access", "deliver"] as const) if (!clean[key]) delete routine[key];
+      for (const key of ["continuity", "sameConversation", "panelId", "cardKey", "modelSelection", "overlap", "runOnStartup", "access", "deliver"] as const) if (!clean[key]) delete routine[key];
       if (!clean.checks) for (const key of ["checks", "checkedAt", "checkTrouble", "checkTroubleCode", "wakeAt"] as const) delete routine[key];
       if (Object.hasOwn(patch, "timeoutMinutes") && patch.timeoutMinutes == null) {
         delete routine.timeoutMinutes;
@@ -1186,7 +1186,7 @@ export class RoutineManager {
             await this.options.startTurn(
               run.botId,
               task.threadId,
-              startPrompt(run, prompt, composeExecutionPrompt({ id: run.routineId, name: run.routineName, trigger: triggerSource, runOn: run.runOn ?? "maus" }, prompt, run.attachments, continuityCarry(run, this.routines, this.runs)), (first) => this.options.promptSaid?.(task.threadId, first) === true),
+              startPrompt(run, prompt, composeExecutionPrompt({ id: run.routineId, name: run.routineName, trigger: triggerSource, runOn: run.runOn ?? "maus" }, prompt, run.attachments, continuityCarry(run, this.routines, this.runs), this.options.runNote?.(this.routines.find((one) => one.id === run.routineId))), (first) => this.options.promptSaid?.(task.threadId, first) === true),
               run.runOn ?? "maus",
               triggerSource,
               (message) => this.failThread(task.threadId, message, { cause: "refused" }), run.id,

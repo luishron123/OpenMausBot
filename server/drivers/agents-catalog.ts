@@ -106,6 +106,8 @@ const TRIGGER_FIELDS_SCHEMA = {
   timeout_minutes: { type: "integer", minimum: 5, maximum: 240, description: "Schedules: optional limit on a run, 5 to 240." },
   clear_timeout: { type: "boolean", description: "Update: true removes the limit." },
   same_conversation: { type: "boolean", description: "app_event, webhook or schedule: each run continues the last run's conversation." },
+  panel_id: { type: "string", description: "Schedules: the panel (id or key) its runs keep current instead of reporting in chat; \"\" unlinks." },
+  card_key: { type: "string", description: "With panel_id: its own card's key." },
   continuity: { type: "boolean", description: "Schedules: each run gets the last run's report." },
   overlap: { type: "string", enum: ["skip", "queue"], description: "Schedules: while a run works, skip (default) or queue one." },
   run_on_startup: { type: "boolean", description: "Repeating schedules: also run when OpenMausBot starts." },

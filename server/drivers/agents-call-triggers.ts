@@ -17,6 +17,7 @@ const EVENTS_ROUTE = "/api/internal/trigger-events";
 const APP_ONLY = ["app", "event", "account"] as const;
 const SAME_CONVERSATION_ONLY = "same_conversation applies only to when=app_event, when=webhook or when=schedule.";
 const REQUEST_ROUTE = "/api/internal/trigger-requests";
+const PANEL_LINK_ROUTE = "/api/internal/panels/link";
 const TAKES = () => ` trigger takes ${argumentNames(fullInputSchema("trigger"))}.`;
 const SCHEDULE_ONLY = ["schedule", "timeout_minutes", "timeoutMinutes", "clear_timeout", "continuity", "overlap", "run_on_startup", "runOnStartup"] as const;
 
@@ -361,7 +362,28 @@ function appliedText(r: Json, done: string, action: string): ToolCallResult {
   };
 }
 
-async function request(body: Json, context: ToolCallContext, done: string): Promise<ToolCallResult> {
+interface PanelLink {
+  panel_id: string;
+  card_key?: string;
+  routine_id?: string;
+}
+
+/** panel_id and card_key, read apart from the trigger's own fields: the link is saved on the routine after it exists. */
+function panelLink(args: Json): { link?: PanelLink; error?: string } {
+  const panelId = args.panel_id, cardKey = args.card_key;
+  if (panelId === undefined || panelId === null) return cardKey === undefined || cardKey === null ? {} : { error: "card_key needs panel_id: the panel whose card this automation updates." };
+  if (typeof panelId !== "string") return { error: 'panel_id must be the panel\'s id or key from list_panels, or "" to unlink.' };
+  if (cardKey !== undefined && cardKey !== null && typeof cardKey !== "string") return { error: 'card_key must be the card\'s key, e.g. "revenue".' };
+  return { link: { panel_id: panelId.trim(), ...(typeof cardKey === "string" && cardKey.trim() ? { card_key: cardKey.trim() } : {}) } };
+}
+
+async function linkPanel(link: PanelLink, context: ToolCallContext): Promise<ToolCallResult> {
+  const { ok, status, body } = await context.client.apiResponse(PANEL_LINK_ROUTE, { method: "POST", body: JSON.stringify(link) });
+  if (ok) return { text: String(body.text ?? "Linked.") };
+  return { text: `The panel link did not apply: ${typeof body.error === "string" ? body.error : `HTTP ${status}`}`, isError: true };
+}
+
+async function request(body: Json, context: ToolCallContext, done: string, link?: PanelLink): Promise<ToolCallResult> {
   const { ok, status, body: r } = await context.client.apiResponse(REQUEST_ROUTE, {
     method: "POST",
     body: JSON.stringify({ fromBotId: context.botId, fromThreadId: context.threadId, ...body }),
@@ -370,7 +392,13 @@ async function request(body: Json, context: ToolCallContext, done: string): Prom
     const error = typeof r.error === "string" ? r.error : `HTTP ${status}`;
     return { text: `The trigger change did not apply: ${error}\n\nDo not claim it was applied. Fix what the error says, or tell the person plainly what is missing.`, isError: true };
   }
-  return appliedText(r, done, String(body.action ?? ""));
+  const applied = appliedText(r, done, String(body.action ?? ""));
+  if (!link) return applied;
+  const routineId = link.routine_id ?? (typeof r.resultId === "string" ? r.resultId : "");
+  const linked = routineId
+    ? await linkPanel({ ...link, routine_id: routineId }, context)
+    : { text: "The panel link did not apply: no trigger id came back. Call trigger action=update with its trigger_id and panel_id.", isError: true };
+  return { text: `${applied.text}\n\n${linked.isError ? `${linked.text}\nThe automation itself was saved; it reports in chat until the panel is linked.` : linked.text}` };
 }
 
 /** Everything a trigger call may carry beyond the fields it sets. */
@@ -384,9 +412,18 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
     if (args.action !== undefined && args.action !== null && args.action !== "list") return { text: "trigger_info action is list or events.", isError: true };
     return listTriggers(args, forBotId, context);
   }
+  const panel = panelLink(args);
+  if (panel.error) return { text: panel.error, isError: true };
+  if (panel.link && forBotId) return { text: "panel_id links only your own automation; leave out for_bot_id or panel_id.", isError: true };
   if (name === "trigger" && args.action === "create") {
     if (args.trigger_id !== undefined && args.trigger_id !== null) return { text: "trigger_id is for a trigger that exists; leave it out to create one.", isError: true };
-    return createTrigger(args, forBotId, context);
+    if (panel.link) {
+      if (args.when !== "schedule" && args.when !== "limit_reset") return { text: "panel_id applies only to when=schedule or when=limit_reset.", isError: true };
+      if (!panel.link.panel_id) return { text: 'panel_id "" unlinks in an update; leave it out to create an automation without a panel.', isError: true };
+      const checked = await linkPanel(panel.link, context);
+      if (checked.isError) return checked;
+    }
+    return createTrigger(args, forBotId, context, panel.link);
   }
   const triggerId = typeof args.trigger_id === "string" ? args.trigger_id.trim() : "";
   // Deleting is its own tool, so an engine's remembered allow for trigger never covers it.
@@ -399,6 +436,8 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
   const { fields, error } = triggerFields(Object.fromEntries(Object.entries(args).filter(([key]) => !CALL_KEYS.has(key))));
   if (error) return { text: error, isError: true };
   const body: Json = { action, triggerId, ...(forBotId ? { forBotId } : {}) };
+  if (panel.link && action !== "update") return { text: "panel_id and card_key change with action=update.", isError: true };
+  if (panel.link && !Object.keys(fields).length) return linkPanel({ ...panel.link, routine_id: triggerId }, context);
   if (action === "update") {
     if (!Object.keys(fields).length) return { text: `The update action needs at least one supported field to change.${TAKES()}`, isError: true };
     body.changes = fields;
@@ -406,7 +445,7 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
     return { text: name === "delete_trigger" ? "delete_trigger takes only trigger_id and for_bot_id." : `The ${action} action changes no fields; send them with action=update.`, isError: true };
   }
   const done = action === "run_now" ? `Started trigger ${triggerId} once now` : `Applied ${action} to trigger ${triggerId}`;
-  return request(body, context, done);
+  return request(body, context, done, panel.link && { ...panel.link, routine_id: triggerId });
 }
 
 async function listTriggers(args: Json, forBotId: string | undefined, context: ToolCallContext): Promise<ToolCallResult> {
@@ -450,7 +489,7 @@ async function listEvents(args: Json, context: ToolCallContext): Promise<ToolCal
   };
 }
 
-async function createTrigger(args: Json, forBotId: string | undefined, context: ToolCallContext): Promise<ToolCallResult> {
+async function createTrigger(args: Json, forBotId: string | undefined, context: ToolCallContext, link?: PanelLink): Promise<ToolCallResult> {
   const when = args.when;
   if (when !== "schedule" && when !== "webhook" && when !== "app_event" && when !== "limit_reset") return { text: `trigger action=create needs when: "schedule", "app_event", "webhook" or "limit_reset".${TAKES()}`, isError: true };
   if (when !== "limit_reset") {
@@ -486,7 +525,7 @@ async function createTrigger(args: Json, forBotId: string | undefined, context: 
     if (timing.error) return { text: timing.error, isError: true };
     const { eventTypes: _unused, payloadFilter: _unusedFilter, ...routine } = fields;
     return request({ action: "create", kind: "schedule", routine: { ...routine, schedule: timing.schedule }, ...(forBotId ? { forBotId } : {}) }, context,
-      `Created the trigger “${String(fields.name)}” for when the limit resets`);
+      `Created the trigger “${String(fields.name)}” for when the limit resets`, link);
   }
   const label = `the ${when === "webhook" ? "webhook" : "schedule"} trigger “${String(fields.name)}”`;
   if (when === "schedule") {
@@ -494,7 +533,7 @@ async function createTrigger(args: Json, forBotId: string | undefined, context: 
     if (fields.eventTypes) return { text: "webhook_event_types applies only to when=webhook.", isError: true };
     if (fields.payloadFilter) return { text: "webhook_payload_filter applies only to when=webhook.", isError: true };
     const { eventTypes: _unused, payloadFilter: _unusedFilter, ...routine } = fields;
-    return request({ action: "create", kind: "schedule", routine, ...(forBotId ? { forBotId } : {}) }, context, `Created ${label}`);
+    return request({ action: "create", kind: "schedule", routine, ...(forBotId ? { forBotId } : {}) }, context, `Created ${label}`, link);
   }
   const misplaced = SCHEDULE_ONLY.find((key) => args[key] !== undefined && args[key] !== null);
   if (misplaced) return { text: `A webhook trigger fires when its link is called, so it takes no ${misplaced}.`, isError: true };
