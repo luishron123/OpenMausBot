@@ -5,7 +5,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Panel, PanelAutomation, PanelCard, PanelCardUpdate, PanelPinnableBlock } from "../../../shared/panels";
+import type { Panel, PanelAutomation, PanelCard, PanelCardUpdate, PanelEstimate, PanelPinnableBlock, PanelSuggestion } from "../../../shared/panels";
 import { panelSummary } from "../../../shared/panels";
 import { setLocale } from "@/lib/i18n";
 
@@ -57,6 +57,8 @@ const automation = (over: Partial<PanelAutomation> = {}): PanelAutomation => ({
 let panels: Panel[];
 let blocks: PanelPinnableBlock[];
 let history: PanelCardUpdate[] = [];
+let suggestions: Record<string, PanelSuggestion[]> = {};
+let estimates: Record<string, PanelEstimate> = {};
 const calls: Array<{ method: string; path: string; body?: unknown }> = [];
 let host: HTMLDivElement;
 let root: Root;
@@ -64,10 +66,12 @@ let PanelsPage: typeof import("./PanelsPage").PanelsPage;
 
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-function server(path: string, method: string, body: Record<string, unknown> | undefined): Response {
+function server(path: string, method: string, body: Record<string, unknown> | undefined, query = ""): Response {
   const parts = path.split("/").slice(3).map(decodeURIComponent);
   if (parts.length === 0) return reply({ panels: panels.map(panelSummary) });
   if (parts[0] === "pinnable") return reply({ blocks });
+  if (parts[0] === "suggestions") return reply({ suggestions: suggestions[new URLSearchParams(query).get("botId") ?? ""] ?? [] });
+  if (parts[0] === "estimate") return reply(estimates[new URLSearchParams(query).get("schedule") ?? ""] ?? { perDayUsd: null, basis: "none" });
   const panel = panels.find((item) => item.id === parts[0]);
   if (!panel) return reply({ error: "No such panel" }, 404);
   if (parts.length === 1 && method === "GET") return reply({ panel });
@@ -107,6 +111,8 @@ beforeEach(async () => {
   fixture.frames.length = 0;
   calls.length = 0;
   history = [];
+  suggestions = {};
+  estimates = {};
   blocks = [{ threadId: "t7", messageId: "m3", botId: "nova", title: "Weekly signups", at: ago(30), text: "312 this week" }];
   panels = [
     {
@@ -126,7 +132,7 @@ beforeEach(async () => {
     const url = new URL(input, "http://x");
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
     calls.push({ method, path: url.pathname, body });
-    return Promise.resolve(server(url.pathname, method, body));
+    return Promise.resolve(server(url.pathname, method, body, url.search));
   }));
   ({ PanelsPage } = await import("./PanelsPage"));
   host = document.createElement("div");
@@ -281,12 +287,14 @@ describe("New card", () => {
     expect(bot.selectedOptions[0]!.textContent).toBe("Scout (suggested)");
     type(dialog.querySelector("textarea")!, "Orders per hour today");
     choose(selects.find((item) => item.getAttribute("aria-label") === "Format")!, "bar");
-    choose(selects.find((item) => item.getAttribute("aria-label") === "How often")!, "daily");
+    const often = selects.find((item) => item.getAttribute("aria-label") === "How often")!;
+    expect([...often.options].map((option) => option.textContent)).toEqual(["every 30 min", "every hour", "daily at 8:00", "Mondays at 8:00", "when asked"]);
+    choose(often, "day");
     act(() => (dialog.querySelector("[data-panel-new-notify]") as HTMLButtonElement).click());
     act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
     await settle();
     expect(posted("/api/panels/p1/cards/new").map((call) => call.body)).toEqual([
-      { prompt: "Orders per hour today", format: "bar", size: "m", botId: "scout", cadence: "daily", notify: true, test: true },
+      { prompt: "Orders per hour today", format: "bar", size: "m", botId: "scout", schedule: "day", notify: true, test: true },
     ]);
     frame();
     await settle();
@@ -297,6 +305,7 @@ describe("New card", () => {
     frame();
     await settle();
     expect(preview.textContent).toContain("18 orders at 10:00");
+    expect((dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement).textContent).toBe("Create");
     choose([...dialog.querySelectorAll("select")].find((item) => item.getAttribute("aria-label") === "Add to")!, "p2");
     act(() => (dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement).click());
     await settle();
@@ -316,6 +325,49 @@ describe("New card", () => {
     act(() => button("Cancel")!.click());
     await settle();
     expect(calls.filter((call) => call.method === "DELETE").map((call) => call.path)).toEqual(["/api/panels/p1/cards/draft1"]);
+  });
+
+  it("fills the card from one of the bot's ideas, sends the alert, and shows the cost a day before testing", async () => {
+    suggestions = {
+      scout: [
+        { title: "Orders today", prompt: "Count today's orders", format: "kpi", schedule: "hour" },
+        { title: "Refund rate", prompt: "Refunds as a share of orders this week", format: "line", schedule: "day" },
+        { title: "Low stock", prompt: "Products under 10 units", format: "checklist", schedule: "half" },
+        { title: "Extra", prompt: "Not shown", format: "text", schedule: "week" },
+      ],
+      nova: [],
+    };
+    estimates = { day: { perDayUsd: 0.12, basis: "recent-runs" }, hour: { perDayUsd: null, basis: "none" } };
+    const dialog = await open();
+    await settle();
+    const ideas = [...dialog.querySelectorAll("[data-panel-new-suggestion]")];
+    expect(ideas.map((idea) => idea.textContent)).toEqual(["Orders today", "Refund rate", "Low stock"]);
+    expect(dialog.querySelector("[data-panel-new-estimate]")?.textContent).toBe("No cost estimate yet");
+    act(() => (ideas[1] as HTMLButtonElement).click());
+    await settle();
+    expect(dialog.querySelector("textarea")!.value).toBe("Refunds as a share of orders this week");
+    expect((dialog.querySelector('input[aria-label="Title"]') as HTMLInputElement).value).toBe("Refund rate");
+    expect(dialog.querySelector("[data-panel-new-estimate]")?.textContent).toBe("≈ $0.12 per day");
+    type(dialog.querySelector("[data-panel-new-alert]") as HTMLInputElement, "the rate goes over 5%");
+    const selects = [...dialog.querySelectorAll("select")];
+    choose(selects.find((item) => item.getAttribute("aria-label") === "How often")!, "manual");
+    expect(dialog.querySelector("[data-panel-new-estimate]")?.textContent).toBe("Costs only when you ask");
+    choose(selects.find((item) => item.getAttribute("aria-label") === "Bot that keeps it")!, "nova");
+    await settle();
+    expect(dialog.querySelector("[data-panel-new-suggestions]")).toBeNull();
+    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/new").map((call) => call.body)).toEqual([
+      { prompt: "Refunds as a share of orders this week", title: "Refund rate", format: "line", size: "m", botId: "nova", schedule: "manual", alert: "the rate goes over 5%", notify: false, test: true },
+    ]);
+  });
+
+  it("says the panel is full at 24 cards and won't test", async () => {
+    panels[0]!.cards = Array.from({ length: 24 }, (_, position) => card({ id: `c${position}`, position }));
+    const dialog = await open();
+    type(dialog.querySelector("textarea")!, "One more");
+    expect(dialog.querySelector("[data-panel-new-full]")?.textContent).toBe("This panel already has 24 cards, the most it can hold. Remove one or add to another panel.");
+    expect((dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("pins a block a bot already posted in a chat", async () => {

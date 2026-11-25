@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, BellOff, ChevronLeft, LoaderCircle, Pin } from "lucide-react";
+import { Bell, BellOff, ChevronLeft, LoaderCircle, Pin, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
 import {
-  PANEL_CADENCES, PANEL_CARD_FORMATS, PANEL_CARD_SIZES, cardUpdating, keepCard, newCard, pinBlock, pinnableBlocks, removeCard, usePanelList,
-  type Panel, type PanelCadence, type PanelCard as Card, type PanelCardFormat, type PanelCardSize, type PanelPinnableBlock,
+  PANEL_CARD_FORMATS, PANEL_CARD_SIZES, PANEL_LIMITS, PANEL_SCHEDULES, cardSuggestions, cardUpdating, costEstimate, keepCard, newCard, pinBlock,
+  pinnableBlocks, removeCard, usePanelList,
+  type Panel, type PanelCard as Card, type PanelCardFormat, type PanelCardSize, type PanelEstimate, type PanelPinnableBlock, type PanelSchedule,
+  type PanelSuggestion,
 } from "@/lib/panels";
 import type { Bot } from "@/state/store";
 import { Select } from "../Select";
-import { PanelCard, panelCardState } from "./PanelCard";
+import { usd } from "./CardSidePanel";
+import { PanelCard, panelCardState, scheduleText } from "./PanelCard";
+import { placedCards } from "./PanelGrid";
 import { PanelDialog } from "./PanelDialog";
 
 const FORMAT_LABEL: Record<PanelCardFormat, string> = {
@@ -18,14 +22,36 @@ const FORMAT_LABEL: Record<PanelCardFormat, string> = {
   bar: "panels.format.bar", checklist: "panels.format.checklist", text: "panels.format.text",
 };
 const SIZE_LABEL: Record<PanelCardSize, string> = { s: "panels.card.sizeSmall", m: "panels.card.sizeMedium", l: "panels.card.sizeLarge" };
-const CADENCE_LABEL: Record<PanelCadence, string> = {
-  "on-request": "panels.cadence.onRequest", hourly: "panels.cadence.hourly", daily: "panels.cadence.daily", weekly: "panels.cadence.weekly",
-};
 const label = (key: string) => t(key as Parameters<typeof t>[0]);
 
 type Draft = { cardId: string; with: string };
 
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback);
+
+/** What a bot suggests keeping track of, read again when the bot changes; empty when it has nothing to go on. */
+function useSuggestions(botId: string): PanelSuggestion[] {
+  const [list, setList] = useState<{ botId: string; suggestions: PanelSuggestion[] } | null>(null);
+  useEffect(() => {
+    if (!botId) return;
+    let alive = true;
+    cardSuggestions(botId).then((suggestions) => { if (alive) setList({ botId, suggestions: suggestions.slice(0, 3) }); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [botId]);
+  return list?.botId === botId ? list.suggestions : [];
+}
+
+/** What a scheduled card costs a day with this bot, from its recent runs; a manual card runs only when asked. */
+function useEstimate(botId: string, schedule: PanelSchedule): PanelEstimate | null {
+  const [estimate, setEstimate] = useState<{ key: string; value: PanelEstimate } | null>(null);
+  const key = `${botId}/${schedule}`;
+  useEffect(() => {
+    if (!botId || schedule === "manual") return;
+    let alive = true;
+    costEstimate(botId, schedule).then((value) => { if (alive) setEstimate({ key, value }); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [botId, schedule, key]);
+  return estimate?.key === key ? estimate.value : null;
+}
 
 /** New card: say what to keep track of, test it here with the bot that will keep it, then add it. Closing before adding
  * drops the test card. */
@@ -36,7 +62,8 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
   const [format, setFormat] = useState<PanelCardFormat>("auto");
   const [size, setSize] = useState<PanelCardSize>("m");
   const [botId, setBotId] = useState(suggested);
-  const [cadence, setCadence] = useState<PanelCadence>("hourly");
+  const [schedule, setSchedule] = useState<PanelSchedule>("hour");
+  const [alert, setAlert] = useState("");
   const [notify, setNotify] = useState(false);
   const [target, setTarget] = useState(panel.id);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -44,6 +71,8 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
   const [problem, setProblem] = useState("");
   const [pinning, setPinning] = useState(false);
   const { panels } = usePanelList();
+  const suggestions = useSuggestions(botId);
+  const estimate = useEstimate(botId, schedule);
   const field = useRef<HTMLTextAreaElement>(null);
   const kept = useRef(false);
   const live = useRef<Draft | null>(null);
@@ -53,14 +82,25 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
     if (live.current && !kept.current) void removeCard(panel.id, live.current.cardId).catch(() => undefined);
   }, [panel.id]);
 
-  const request = { prompt: prompt.trim(), ...(title.trim() ? { title: title.trim() } : {}), format, size, botId, cadence, notify };
+  const request = {
+    prompt: prompt.trim(), ...(title.trim() ? { title: title.trim() } : {}), format, size, botId, schedule, ...(alert.trim() ? { alert: alert.trim() } : {}), notify,
+  };
   const asked = JSON.stringify(request);
   const tested = draft !== null && draft.with === asked;
   const draftCard: Card | undefined = draft ? panel.cards.find((card) => card.id === draft.cardId) : undefined;
   const botName = bots.find((bot) => bot.id === botId)?.name ?? "";
+  const targetCount = target === panel.id ? placedCards(panel).length : panels?.find((item) => item.id === target)?.cardCount ?? 0;
+  const full = targetCount >= PANEL_LIMITS.cardsPerPanel;
+  const suggest = (suggestion: PanelSuggestion) => {
+    setTitle(suggestion.title);
+    setPrompt(suggestion.prompt);
+    setFormat(suggestion.format);
+    setSchedule(suggestion.schedule);
+    field.current?.focus();
+  };
 
   const test = async () => {
-    if (!request.prompt || !botId || busy) return;
+    if (!request.prompt || !botId || busy || full) return;
     setBusy(true);
     setProblem("");
     try {
@@ -75,7 +115,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
     }
   };
   const add = async () => {
-    if (!draft || busy) return;
+    if (!draft || busy || full) return;
     setBusy(true);
     setProblem("");
     try {
@@ -100,11 +140,11 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
       <div className="ms-auto flex gap-2">
         <button type="button" className="ui-button ui-button-md" onClick={onClose}>{t("common.cancel")}</button>
         {tested ? (
-          <button type="button" data-panel-new="add" className="ui-button ui-button-md ui-button-primary" disabled={busy} aria-busy={busy || undefined} onClick={() => void add()}>
-            {busy ? t("panels.new.adding") : t("panels.new.add")}
+          <button type="button" data-panel-new="add" className="ui-button ui-button-md ui-button-primary" disabled={busy || full} aria-busy={busy || undefined} onClick={() => void add()}>
+            {busy ? t("panels.new.adding") : t("panels.new.create")}
           </button>
         ) : (
-          <button type="button" data-panel-new="test" className="ui-button ui-button-md ui-button-primary" disabled={busy || !request.prompt || !botId} aria-busy={busy || undefined} onClick={() => void test()}>
+          <button type="button" data-panel-new="test" className="ui-button ui-button-md ui-button-primary" disabled={busy || full || !request.prompt || !botId} aria-busy={busy || undefined} onClick={() => void test()}>
             {busy ? t("panels.new.testing") : draft ? t("panels.new.testAgain") : t("panels.new.test")}
           </button>
         )}
@@ -117,6 +157,23 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
   return (
     <PanelDialog title={t("panels.new.title")} onClose={onClose} footer={footer} wide>
       <p className="mb-3 text-[13px] leading-[18px] text-ink-secondary">{t("panels.new.subtitle")}</p>
+      {suggestions.length > 0 && (
+        <div data-panel-new-suggestions className="mb-3 flex flex-wrap items-center gap-1.5" role="group" aria-label={t("panels.new.suggestions", { name: botName })}>
+          <Sparkles size={14} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.title}
+              type="button"
+              data-panel-new-suggestion
+              title={suggestion.prompt}
+              onClick={() => suggest(suggestion)}
+              className="ui-button ui-button-sm max-w-full"
+            >
+              <span dir="auto" className="truncate">{suggestion.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div data-panel-new-draft className="flex flex-col gap-3 rounded-xl border border-hairline/40 bg-card p-4">
         <div className="flex min-w-0 items-center gap-2">
           <input
@@ -166,11 +223,30 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
               <option key={bot.id} value={bot.id}>{bot.id === suggested ? t("panels.new.botSuggested", { name: bot.name }) : bot.name}</option>
             ))}
           </Select>
-          <Select variant="pill" size="sm" value={cadence} onChange={(event) => setCadence(event.target.value as PanelCadence)} aria-label={t("panels.new.cadence")}>
-            {PANEL_CADENCES.map((item) => <option key={item} value={item}>{label(CADENCE_LABEL[item])}</option>)}
+          <Select variant="pill" size="sm" value={schedule} onChange={(event) => setSchedule(event.target.value as PanelSchedule)} aria-label={t("panels.new.cadence")}>
+            {PANEL_SCHEDULES.map((item) => <option key={item} value={item}>{scheduleText(item)}</option>)}
           </Select>
+          <span data-panel-new-estimate className="text-[12px] leading-4 text-ink-tertiary">
+            {schedule === "manual"
+              ? t("panels.new.estimateManual")
+              : estimate?.perDayUsd != null ? t("panels.new.estimate", { amount: usd(estimate.perDayUsd) }) : estimate ? t("panels.new.estimateNone") : ""}
+          </span>
         </div>
+        <label className="flex min-w-0 items-center gap-2 border-t border-hairline/40 pt-3 text-[13px] text-ink-secondary">
+          <Bell size={14} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
+          <span className="sr-only">{t("panels.new.alertLabel")}</span>
+          <input
+            dir="auto"
+            value={alert}
+            maxLength={PANEL_LIMITS.alert}
+            data-panel-new-alert
+            onChange={(event) => setAlert(event.target.value)}
+            placeholder={t("panels.new.alertPlaceholder")}
+            className="min-w-0 flex-1 bg-transparent text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink-tertiary"
+          />
+        </label>
       </div>
+      {full && <p role="alert" data-panel-new-full className="mt-3 text-[13px] leading-[18px] text-danger">{t("panels.limit.cards", { count: PANEL_LIMITS.cardsPerPanel })}</p>}
       {draft && (
         <section aria-label={t("panels.new.preview")} data-panel-new-preview className="mt-4 flex flex-col gap-2">
           <h3 className="text-[12px] font-medium leading-4 text-ink-tertiary">{t("panels.new.preview")}</h3>
@@ -179,7 +255,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
               card={draftCard}
               state={panelCardState(draftCard, cardUpdating(panel, draftCard))}
               bot={bots.find((bot) => bot.id === draftCard.botId)}
-              cadence={label(CADENCE_LABEL[cadence])}
+              cadence={scheduleText(schedule)}
               bare
               onResize={() => undefined}
               onRemove={() => undefined}
