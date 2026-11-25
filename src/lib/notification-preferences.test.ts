@@ -152,10 +152,10 @@ describe("notification sounds preference", () => {
 describe("sound style preference", () => {
   it("reads the earlier on/off values: a saved \"0\" stays off, anything else plays the default style", async () => {
     const preference = await import("./notification-preferences");
-    expect(preference.parseSoundChoice("chip")).toBe("click");
+    expect(preference.parseSoundChoice("chip")).toBe("tap");
     expect(preference.parseSoundChoice("0")).toBe("off");
-    for (const value of ["1", null, undefined, "", "broken"]) expect(preference.parseSoundChoice(value)).toBe("click");
-    for (const style of ["click", "glass", "retro", "tap", "breeze"] as const) expect(preference.parseSoundChoice(style)).toBe(style);
+    for (const value of ["1", null, undefined, "", "broken"]) expect(preference.parseSoundChoice(value)).toBe("tap");
+    for (const style of ["tap", "click", "glass", "retro", "breeze"] as const) expect(preference.parseSoundChoice(style)).toBe(style);
     local.setItem(preference.NOTIFICATION_SOUNDS_KEY, "0");
     expect(preference.readSoundChoice()).toBe("off");
     expect(preference.useSoundChoice()).toBe("off");
@@ -183,7 +183,7 @@ describe("sound style preference", () => {
     expect(preference.readSoundChoice()).toBe("retro");
     preference.setNotificationSounds(false);
     preference.setNotificationSounds(true);
-    expect(preference.readSoundChoice()).toBe("click");
+    expect(preference.readSoundChoice()).toBe("tap");
   });
 });
 

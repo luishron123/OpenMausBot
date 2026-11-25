@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { phraseOf, renderSound, SOUND_EVENTS, SOUND_PEAK, SOUND_STYLES, stepFrequency, type SoundCue } from "./render";
+import { DEFAULT_SOUND_STYLE, phraseOf, renderSound, SOUND_EVENTS, SOUND_PEAK, SOUND_STYLES, stepFrequency, type SoundCue } from "./render";
 
 const RATES = [44_100, 48_000];
 const CUES: SoundCue[] = [...SOUND_EVENTS, "preview"];
@@ -99,5 +99,12 @@ describe("app sounds rendered offline", () => {
     expect(stepFrequency(-5) / stepFrequency(0)).toBeCloseTo(0.5, 10);
     const semitones = [0, 1, 2, 3, 4].map((step) => Math.round(12 * Math.log2(stepFrequency(step) / stepFrequency(0))));
     expect(semitones).toEqual([0, 2, 4, 7, 9]);
+  });
+});
+
+describe("sound style order", () => {
+  it("lists Tap first and plays it for anyone who never picked a style", () => {
+    expect(SOUND_STYLES).toEqual(["tap", "click", "glass", "retro", "breeze"]);
+    expect(DEFAULT_SOUND_STYLE).toBe(SOUND_STYLES[0]);
   });
 });

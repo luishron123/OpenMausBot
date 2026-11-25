@@ -1,7 +1,7 @@
 export const SOUND_EVENTS = ["send", "reply", "done", "attention", "approved", "error", "stop", "mention", "discard", "record"] as const;
 export type SoundEvent = (typeof SOUND_EVENTS)[number];
 
-export const SOUND_STYLES = ["click", "glass", "retro", "tap", "breeze"] as const;
+export const SOUND_STYLES = ["tap", "click", "glass", "retro", "breeze"] as const;
 export type SoundStyle = (typeof SOUND_STYLES)[number];
 
 export type SoundChoice = SoundStyle | "off";
@@ -9,7 +9,7 @@ export type SoundChoice = SoundStyle | "off";
 /** What can be rendered: every event, plus the sample a person hears when they pick a style. */
 export type SoundCue = SoundEvent | "preview";
 
-export const DEFAULT_SOUND_STYLE: SoundStyle = "click";
+export const DEFAULT_SOUND_STYLE: SoundStyle = "tap";
 
 /** The loudest sample any sound reaches, as a share of full scale. */
 export const SOUND_PEAK = 0.35;
