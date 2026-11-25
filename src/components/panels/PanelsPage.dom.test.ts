@@ -56,6 +56,8 @@ const calls: Array<{ method: string; path: string; body?: unknown }> = [];
 let host: HTMLDivElement;
 let root: Root;
 let PanelsPage: typeof import("./PanelsPage").PanelsPage;
+let REFRESH_POLL_MS: number;
+let REFRESH_GIVE_UP_MS: number;
 
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -112,6 +114,7 @@ beforeEach(async () => {
     return Promise.resolve(server(path, method, body));
   }));
   ({ PanelsPage } = await import("./PanelsPage"));
+  ({ REFRESH_POLL_MS, REFRESH_GIVE_UP_MS } = await import("./PanelView"));
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -206,6 +209,47 @@ describe("one panel", () => {
     await settle();
     expect(calls.find((call) => call.method === "POST")).toEqual({ method: "POST", path: "/api/panels/p1/refresh", body: { routineId: "r1" } });
     expect(button("Updating…")?.disabled).toBe(true);
+  });
+
+  it("lets go of Updating… once a run that never showed as running has finished, and says it updated nothing", async () => {
+    panels[0]!.automations = [automation({ lastRunAt: ago(60) })];
+    await show();
+    act(() => button("Refresh now")!.click());
+    await settle();
+    expect(button("Updating…")?.disabled).toBe(true);
+    panels[0]!.automations = [automation({ lastRunAt: new Date().toISOString(), lastRunUpdatedNothing: true })];
+    act(() => fixture.frames.forEach((listener) => listener.onFrame({ kind: "panels.changed", panelId: "p1" } as { kind: string })));
+    await settle();
+    expect(button("Refresh now")?.disabled).toBe(false);
+    expect(host.querySelector('[data-panel-automation="r1"]')?.textContent).toContain("The last run didn't update the panel");
+  });
+
+  it("reads the panel again while it waits, so a finished run shows even when no change arrives", async () => {
+    panels[0]!.automations = [automation({ lastRunAt: ago(60) })];
+    await show();
+    vi.useFakeTimers();
+    act(() => button("Refresh now")!.click());
+    await settle();
+    panels[0]!.automations = [automation({ lastRunAt: new Date().toISOString(), lastRunUpdatedNothing: true })];
+    const reads = calls.filter((call) => call.method === "GET" && call.path === "/api/panels/p1").length;
+    act(() => { vi.advanceTimersByTime(REFRESH_POLL_MS); });
+    await settle();
+    expect(calls.filter((call) => call.method === "GET" && call.path === "/api/panels/p1").length).toBe(reads + 1);
+    expect(button("Refresh now")?.disabled).toBe(false);
+    expect(host.textContent).toContain("The last run didn't update the panel");
+  });
+
+  it("gives Refresh now back after two minutes when the run never shows up", async () => {
+    await show();
+    vi.useFakeTimers();
+    act(() => button("Refresh now")!.click());
+    await settle();
+    act(() => { vi.advanceTimersByTime(REFRESH_GIVE_UP_MS - REFRESH_POLL_MS); });
+    await settle();
+    expect(button("Updating…")?.disabled).toBe(true);
+    act(() => { vi.advanceTimersByTime(REFRESH_POLL_MS); });
+    await settle();
+    expect(button("Refresh now")?.disabled).toBe(false);
   });
 
   it("says when an automation is paused", async () => {

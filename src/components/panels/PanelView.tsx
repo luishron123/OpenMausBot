@@ -21,20 +21,41 @@ export const PANEL_GRID = "grid auto-rows-[minmax(10rem,auto)] grid-cols-1 gap-4
 
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback);
 
-function AutomationLine({ panelId, automation }: { panelId: string; automation: PanelAutomation }) {
+/** While a Refresh now waits for its run to finish, the panel is read again this often, and the wait ends after the last. */
+export const REFRESH_POLL_MS = 3_000;
+export const REFRESH_GIVE_UP_MS = 120_000;
+
+type Asked = { at: number; lastRunAt: string | null };
+
+/** A run counts as the one asked for once it started after the click, or the panel names a different last run than then;
+ * a run quick enough to finish between two reads never shows `running`, so that alone can't end the wait. */
+const runFinished = (automation: PanelAutomation, asked: Asked) => {
+  if (automation.running === true || !automation.lastRunAt) return false;
+  return automation.lastRunAt !== asked.lastRunAt || Date.parse(automation.lastRunAt) >= asked.at;
+};
+
+function AutomationLine({ panelId, automation, onPoll }: { panelId: string; automation: PanelAutomation; onPoll: () => void }) {
   const dispatch = useStoreDispatch();
-  const [asked, setAsked] = useState(false);
+  const [asked, setAsked] = useState<Asked | null>(null);
   const [problem, setProblem] = useState("");
-  useEffect(() => { if (automation.running) setAsked(false); }, [automation.running]);
-  const running = automation.running === true || asked;
+  const poll = useRef(onPoll);
+  poll.current = onPoll;
+  useEffect(() => { if (asked && runFinished(automation, asked)) setAsked(null); }, [asked, automation]);
+  useEffect(() => {
+    if (!asked) return;
+    const every = window.setInterval(() => poll.current(), REFRESH_POLL_MS);
+    const giveUp = window.setTimeout(() => setAsked(null), REFRESH_GIVE_UP_MS);
+    return () => { window.clearInterval(every); window.clearTimeout(giveUp); };
+  }, [asked]);
+  const running = automation.running === true || asked !== null;
   const next = automation.enabled && automation.nextRunAt ? Date.parse(automation.nextRunAt) : NaN;
   const refresh = async () => {
     setProblem("");
-    setAsked(true);
+    setAsked({ at: Date.now(), lastRunAt: automation.lastRunAt ?? null });
     try {
       await refreshPanel(panelId, automation.routineId);
     } catch (cause) {
-      setAsked(false);
+      setAsked(null);
       setProblem(errorText(cause, t("panels.refreshFailed")));
     }
   };
@@ -231,7 +252,7 @@ export function PanelView({ panelId, onBack, onDelete }: { panelId: string; onBa
                 </p>
                 {(panel.automations ?? []).length > 0 && (
                   <ul aria-label={t("panels.automation.list")} className="mt-1 flex flex-col gap-2">
-                    {(panel.automations ?? []).map((automation) => <AutomationLine key={automation.routineId} panelId={panel.id} automation={automation} />)}
+                    {(panel.automations ?? []).map((automation) => <AutomationLine key={automation.routineId} panelId={panel.id} automation={automation} onPoll={refresh} />)}
                   </ul>
                 )}
                 {problem && <p role="alert" className="text-[13px] text-danger">{problem}</p>}
