@@ -24,7 +24,15 @@ export const PANEL_LIMITS = {
   source: 300,
   /** A draft not kept is removed after this long. */
   draftMs: 3_600_000,
+  /** Drafts on one panel at a time; they are not counted in `cardsPerPanel` nor `scheduledCards`. */
+  draftsPerPanel: 4,
 } as const;
+
+/** Why a card's own automation failed, for the screen to say in the person's language; `failure` keeps an English
+ * sentence for builds that do not know the code. "paused": five failures in a row turned it off. "no_update": a run
+ * ended without updating the card. "engine": the bot's AI cannot run it read-only. */
+export const PANEL_FAILURE_CODES = ["paused", "no_update", "engine"] as const;
+export type PanelFailureCode = (typeof PANEL_FAILURE_CODES)[number];
 
 /** Lowercase letters, digits and hyphens: the key a bot gives a panel or card so making it again finds the same one. */
 export const PANEL_KEY = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -77,6 +85,8 @@ export interface PanelCard {
   /** Why the last update failed, one sentence; the widget keeps the last good data. */
   failure?: string;
   failedAt?: string;
+  /** Set with `failure` when the server, not the bot, failed the card. */
+  failureCode?: PanelFailureCode;
   /** Made by New widget's Test and not added yet: not drawn on the panel nor counted, dropped when the dialog closes. */
   draft?: true;
   /** What the person asked to keep track of in New widget. */
@@ -110,6 +120,7 @@ export interface PanelCardUpdate {
   status: PanelCardStatus;
   summary?: string;
   failure?: string;
+  failureCode?: PanelFailureCode;
   /** The tree the card showed after this update. */
   widget?: WidgetRoot;
   alert?: string;
