@@ -89,12 +89,12 @@ function clip(text: string): string {
   return text.length <= WIDGET_LIMITS.fallback ? text : `${text.slice(0, WIDGET_LIMITS.fallback - 1).trimEnd()}…`;
 }
 
-type CanonicalWidget =
+export type CanonicalWidget =
   | { ok: true; root: WidgetRoot; text: string; masked: boolean }
   | { ok: false; status: 400; error: string };
 
-/** Scrubbed before clipped: half a key no longer looks like one. */
-function canonicalWidget(input: Record<string, unknown>): CanonicalWidget {
+/** Scrubbed before clipped: half a key no longer looks like one. Panels store their cards through this too. */
+export function canonicalWidget(input: Record<string, unknown>): CanonicalWidget {
   const parsed = parseWidgetInput(input.widget);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
   const given = input.fallback_text;
