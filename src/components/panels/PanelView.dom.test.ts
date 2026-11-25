@@ -59,6 +59,7 @@ let blocks: PanelPinnableBlock[];
 let history: PanelCardUpdate[] = [];
 let suggestions: Record<string, PanelSuggestion[]> = {};
 let estimates: Record<string, PanelEstimate> = {};
+let keepRefusal = "";
 const calls: Array<{ method: string; path: string; body?: unknown }> = [];
 let host: HTMLDivElement;
 let root: Root;
@@ -93,6 +94,7 @@ function server(path: string, method: string, body: Record<string, unknown> | un
   }
   if (parts[2] === "restore") { panel.cards.push(body!.card as PanelCard); return reply({ panel }); }
   const target = panel.cards.find((item) => item.id === parts[2])!;
+  if (parts[3] === "keep" && keepRefusal) return reply({ error: keepRefusal }, 409);
   if (parts[3] === "keep") { delete target.draft; return reply({ panel }); }
   if (parts[3] === "history") return reply({ updates: history });
   if (parts[3] === "alert") { delete target.alertActive; return reply({ panel }); }
@@ -113,6 +115,7 @@ beforeEach(async () => {
   history = [];
   suggestions = {};
   estimates = {};
+  keepRefusal = "";
   blocks = [{ threadId: "t7", messageId: "m3", botId: "nova", title: "Weekly signups", at: ago(30), text: "312 this week" }];
   panels = [
     {
@@ -362,12 +365,37 @@ describe("New card", () => {
     ]);
   });
 
-  it("says the panel is full at 24 cards and won't test", async () => {
+  it("tests at 24 cards, since a test card isn't counted, and says why Create was refused", async () => {
     panels[0]!.cards = Array.from({ length: 24 }, (_, position) => card({ id: `c${position}`, position }));
+    keepRefusal = "This panel already has 24 cards. Remove one first, or keep this card on another panel.";
     const dialog = await open();
     type(dialog.querySelector("textarea")!, "One more");
     expect(dialog.querySelector("[data-panel-new-full]")?.textContent).toBe("This panel already has 24 cards, the most it can hold. Remove one or add to another panel.");
-    expect((dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).disabled).toBe(true);
+    const test = dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement;
+    expect(test.disabled).toBe(false);
+    act(() => test.click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/new")).toHaveLength(1);
+    const add = dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement;
+    expect(add.disabled).toBe(false);
+    act(() => add.click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/draft1/keep")).toHaveLength(1);
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe("This panel already has 24 cards, the most it can hold. Remove one or add to another panel.");
+    expect(dialog.querySelector("[data-panel-new-full]")).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("shows the server's reason when Create is refused for another limit", async () => {
+    keepRefusal = "There are already 60 cards that update by themselves. Choose Manual, or remove a scheduled card first.";
+    const dialog = await open();
+    type(dialog.querySelector("textarea")!, "Refunds this week");
+    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
+    await settle();
+    act(() => (dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement).click());
+    await settle();
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe(keepRefusal);
+    expect((dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("pins a block a bot already posted in a chat", async () => {
@@ -432,6 +460,24 @@ describe("what each card is doing", () => {
     expect(posted("/api/panels/p1/cards/f/resolve")).toHaveLength(1);
   });
 
+  it("says why the server failed a card in the person's language, and the bot's own sentence when there is no code", async () => {
+    panels[0]!.cards = [
+      card({ id: "p", title: "Paused", status: "failed", failure: "Paused after 5 failures in a row.", failureCode: "paused", failedAt: ago(3) }),
+      card({ id: "n", title: "Quiet", position: 1, status: "failed", failure: "The run ended without an update.", failureCode: "no_update", failedAt: ago(3) }),
+      card({ id: "e", title: "Engine", position: 2, status: "failed", failure: "This AI cannot run read-only.", failureCode: "engine", failedAt: ago(3) }),
+      card({ id: "o", title: "Old", position: 3, status: "failed", failure: "Shopify didn't answer", failedAt: ago(3) }),
+    ];
+    panels[0]!.automations = [];
+    await (await import("@/lib/i18n")).loadLocale("pt-br");
+    await show();
+    const failure = (id: string) => host.querySelector(`[data-panel-card="${id}"] [data-panel-card-failure]`)?.textContent;
+    expect(failure("p")).toBe("Pausado depois de 5 falhas seguidas");
+    expect(failure("n")).toBe("A última atualização não trouxe dados novos");
+    expect(failure("e")).toBe("O bot deste card usa um motor que ainda não suporta atualização automática");
+    expect(failure("o")).toBe("Shopify didn't answer");
+    expect(host.querySelectorAll("[data-panel-card-resolve]")).toHaveLength(4);
+  });
+
   it("marks updating only the card whose own automation runs", async () => {
     panels[0]!.cards = [card({ routineId: "own" }), card({ id: "c2", title: "Other", position: 1, routineId: "other" })];
     panels[0]!.automations = [automation({ routineId: "own", running: true })];
@@ -464,9 +510,11 @@ describe("the card's side panel", () => {
       { at: ago(12), status: "ok", summary: "Orders went from 40 to 42", costUsd: 0.034, tokens: 12_400 },
       { at: ago(80), status: "failed", failure: "Shopify didn't answer", costUsd: 0.004 },
       { at: ago(140), status: "ok", change: "show it as bars" },
+      { at: ago(200), status: "failed", failure: "The run ended without an update.", failureCode: "no_update" },
     ];
     const side = await openCard("c1");
     expect(side.getAttribute("aria-label")).toBe("Orders today, details");
+    expect([...side.querySelectorAll("h2")].filter((heading) => heading.textContent === "Orders today")).toHaveLength(1);
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Close");
     expect(side.querySelector("[data-panel-card]")?.textContent).toContain("42 orders");
     expect(side.querySelector("[data-panel-side-automation]")?.textContent).toMatch(/Scout · every hour · next today/);
@@ -480,6 +528,7 @@ describe("the card's side panel", () => {
     expect(items[1]).toContain("under $0.01");
     expect(items[2]).toContain("Asked: show it as bars");
     expect(items[2]).not.toContain("$");
+    expect(items[3]).toContain("The last update brought no new data");
     expect(calls.some((call) => call.path === "/api/panels/p1/cards/c1/history")).toBe(true);
   });
 

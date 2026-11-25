@@ -10,7 +10,7 @@ import {
 } from "@/lib/panels";
 import type { Bot } from "@/state/store";
 import { BotAvatar } from "../Avatar";
-import { PanelCard, cardCadence, panelCardState } from "./PanelCard";
+import { PanelCard, cardCadence, failureText, panelCardState } from "./PanelCard";
 
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback);
 
@@ -69,7 +69,7 @@ function History({ panelId, card }: { panelId: string; card: Card }) {
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p dir="auto" className={cn("text-[13px] leading-[18px]", update.status === "failed" ? "text-danger" : "text-ink")}>
                 <span className="sr-only">{update.status === "failed" ? t("panels.history.failed") : t("panels.history.ok")}: </span>
-                {update.status === "failed" ? update.failure ?? t("panels.card.failedShort") : update.summary ?? t("panels.history.noSummary")}
+                {update.status === "failed" ? failureText(update) : update.summary ?? t("panels.history.noSummary")}
               </p>
               {update.change && <p dir="auto" className="text-[12px] leading-4 text-ink-secondary">{t("panels.history.asked", { text: update.change })}</p>}
               {update.alert && (
@@ -160,6 +160,7 @@ export function CardSidePanel({ panel, card, bots, onClose, onRemove }: {
             bot={bot}
             cadence={cardCadence(panel, card)}
             bare
+            untitled
             onResize={() => {}}
             onRemove={() => onRemove(card)}
             onResolve={() => run("resolve", () => resolveCard(panel.id, card.id), t("panels.side.resolved"), t("panels.card.resolveFailed")).then(() => {})}

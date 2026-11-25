@@ -5,7 +5,9 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { nextWhen } from "@/lib/automations";
 import { relativeTime } from "@/lib/memory";
-import { PANEL_CARD_SIZES, cardAutomation, type Panel, type PanelAutomation, type PanelCard as Card, type PanelCardSize, type PanelSchedule } from "@/lib/panels";
+import {
+  PANEL_CARD_SIZES, cardAutomation, type Panel, type PanelAutomation, type PanelCard as Card, type PanelCardSize, type PanelFailureCode, type PanelSchedule,
+} from "@/lib/panels";
 import type { Bot } from "@/state/store";
 import { BotAvatar } from "../Avatar";
 import { widgetFields, widgetInitialValues, type WidgetRoot } from "../../../shared/widget";
@@ -74,6 +76,18 @@ export const scheduleText = (schedule: PanelSchedule): string => t(SCHEDULE_TEXT
 export const cardCadence = (panel: Panel, card: Card): string =>
   card.schedule ? scheduleText(card.schedule) : cadenceText(cardAutomation(panel, card));
 
+const FAILURE_TEXT: Record<PanelFailureCode, "panels.failure.paused" | "panels.failure.noUpdate" | "panels.failure.engine"> = {
+  paused: "panels.failure.paused",
+  no_update: "panels.failure.noUpdate",
+  engine: "panels.failure.engine",
+};
+
+/** Why a card or one of its updates failed: the server's code in the person's language, else the sentence it sent. */
+export function failureText({ failure, failureCode }: { failure?: string; failureCode?: PanelFailureCode }): string {
+  const key = failureCode ? FAILURE_TEXT[failureCode] : undefined;
+  return key ? t(key) : failure ?? t("panels.card.failedShort");
+}
+
 const NOTHING = (): void => {};
 
 /** The card's widget as in chat, read-only: its buttons and fields take no input, since nobody's turn is waiting on them. */
@@ -130,7 +144,7 @@ export type CardMover = {
   dragging: boolean;
 };
 
-export function PanelCard({ card, state, bot, cadence, organizing = false, bare = false, selected = false, mover, onResize, onRemove, onOpen, onResolve }: {
+export function PanelCard({ card, state, bot, cadence, organizing = false, bare = false, untitled = false, selected = false, mover, onResize, onRemove, onOpen, onResolve }: {
   card: Card;
   state: PanelCardState;
   bot?: Pick<Bot, "id" | "name"> & Partial<Bot>;
@@ -138,6 +152,8 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
   organizing?: boolean;
   /** A preview: no menu, no size or span of its own. */
   bare?: boolean;
+  /** Shown under a heading that already names the card: no header of its own. */
+  untitled?: boolean;
   /** Open in the side panel. */
   selected?: boolean;
   mover?: CardMover;
@@ -189,7 +205,7 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
         !bare && PANEL_CARD_SPAN[card.size],
       )}
     >
-      <header className="flex min-w-0 items-start gap-1 px-4 pb-3 pt-3.5">
+      {!untitled && <header className="flex min-w-0 items-start gap-1 px-4 pb-3 pt-3.5">
         <h2 dir="auto" title={card.title} className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-5 text-ink">
           {onOpen ? (
             <button
@@ -257,8 +273,8 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
             items={menu}
           />
         )}
-      </header>
-      <div className="min-h-0 flex-1">
+      </header>}
+      <div className={cn("min-h-0 flex-1", untitled && "pt-3.5")}>
         {card.widget ? (
           <div className={cn("transition-opacity motion-reduce:transition-none", state === "failed" && "opacity-[0.55]")}>
             <CardWidget root={card.widget} name={card.title} />
@@ -290,10 +306,10 @@ export function PanelCard({ card, state, bot, cadence, organizing = false, bare 
           </span>
         </p>
       )}
-      {state === "failed" && (card.failure || onResolve) && (
+      {state === "failed" && (card.failure || card.failureCode || onResolve) && (
         <div className="mx-4 mb-1 flex items-start gap-2 border-t border-hairline/40 pt-3 text-[13px] leading-[18px] text-danger">
           <CircleAlert aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
-          <span dir="auto" className="min-w-0 flex-1 break-words">{card.failure ?? t("panels.card.failedShort")}</span>
+          <span dir="auto" data-panel-card-failure={card.failureCode ?? ""} className="min-w-0 flex-1 break-words">{failureText(card)}</span>
           {onResolve && !organizing && (
             <button
               type="button"

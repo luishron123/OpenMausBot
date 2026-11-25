@@ -8176,5 +8176,8 @@
   "skillBurger.pill.running": "実行中… {count}",
   "skillBurger.pill.stopped": "停止",
   "skillBurger.pill.addPath": "手順を追加",
-  "skillBurger.card.madeBy": "{name} が作成"
+  "skillBurger.card.madeBy": "{name} が作成",
+  "panels.failure.paused": "5回連続で失敗したため一時停止しました",
+  "panels.failure.noUpdate": "前回の更新では新しいデータがありませんでした",
+  "panels.failure.engine": "このカードのボットが使うエンジンは、まだ自動更新に対応していません"
 }

@@ -10,6 +10,7 @@ import {
   type Panel, type PanelCard as Card, type PanelCardFormat, type PanelCardSize, type PanelEstimate, type PanelPinnableBlock, type PanelSchedule,
   type PanelSuggestion,
 } from "@/lib/panels";
+import { ApiError } from "@/state/api";
 import type { Bot } from "@/state/store";
 import { Select } from "../Select";
 import { usd } from "./CardSidePanel";
@@ -100,7 +101,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
   };
 
   const test = async () => {
-    if (!request.prompt || !botId || busy || full) return;
+    if (!request.prompt || !botId || busy) return;
     setBusy(true);
     setProblem("");
     try {
@@ -115,7 +116,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
     }
   };
   const add = async () => {
-    if (!draft || busy || full) return;
+    if (!draft || busy) return;
     setBusy(true);
     setProblem("");
     try {
@@ -124,7 +125,8 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
       onClose();
     } catch (cause) {
       setBusy(false);
-      setProblem(errorText(cause, t("panels.new.addFailed")));
+      const fullRefusal = full && cause instanceof ApiError && cause.status === 409;
+      setProblem(fullRefusal ? t("panels.limit.cards", { count: PANEL_LIMITS.cardsPerPanel }) : errorText(cause, t("panels.new.addFailed")));
     }
   };
 
@@ -140,11 +142,11 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
       <div className="ms-auto flex gap-2">
         <button type="button" className="ui-button ui-button-md" onClick={onClose}>{t("common.cancel")}</button>
         {tested ? (
-          <button type="button" data-panel-new="add" className="ui-button ui-button-md ui-button-primary" disabled={busy || full} aria-busy={busy || undefined} onClick={() => void add()}>
+          <button type="button" data-panel-new="add" className="ui-button ui-button-md ui-button-primary" disabled={busy} aria-busy={busy || undefined} onClick={() => void add()}>
             {busy ? t("panels.new.adding") : t("panels.new.create")}
           </button>
         ) : (
-          <button type="button" data-panel-new="test" className="ui-button ui-button-md ui-button-primary" disabled={busy || full || !request.prompt || !botId} aria-busy={busy || undefined} onClick={() => void test()}>
+          <button type="button" data-panel-new="test" className="ui-button ui-button-md ui-button-primary" disabled={busy || !request.prompt || !botId} aria-busy={busy || undefined} onClick={() => void test()}>
             {busy ? t("panels.new.testing") : draft ? t("panels.new.testAgain") : t("panels.new.test")}
           </button>
         )}
@@ -246,7 +248,7 @@ export function NewCardDialog({ panel, bots, onClose }: { panel: Panel; bots: Re
           />
         </label>
       </div>
-      {full && <p role="alert" data-panel-new-full className="mt-3 text-[13px] leading-[18px] text-danger">{t("panels.limit.cards", { count: PANEL_LIMITS.cardsPerPanel })}</p>}
+      {full && !problem && <p data-panel-new-full className="mt-3 text-[13px] leading-[18px] text-ink-secondary">{t("panels.limit.cards", { count: PANEL_LIMITS.cardsPerPanel })}</p>}
       {draft && (
         <section aria-label={t("panels.new.preview")} data-panel-new-preview className="mt-4 flex flex-col gap-2">
           <h3 className="text-[12px] font-medium leading-4 text-ink-tertiary">{t("panels.new.preview")}</h3>

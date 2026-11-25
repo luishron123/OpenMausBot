@@ -4320,5 +4320,8 @@
   "skillBurger.pill.running": "Виконується… {count}",
   "skillBurger.pill.stopped": "Зупинено",
   "skillBurger.pill.addPath": "Додати шлях",
-  "skillBurger.card.madeBy": "Створено: {name}"
+  "skillBurger.card.madeBy": "Створено: {name}",
+  "panels.failure.paused": "Призупинено після 5 збоїв поспіль",
+  "panels.failure.noUpdate": "Останнє оновлення не принесло нових даних",
+  "panels.failure.engine": "Бот цієї картки використовує рушій, який поки не підтримує автоматичне оновлення"
 }

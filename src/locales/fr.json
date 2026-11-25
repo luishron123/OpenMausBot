@@ -4048,5 +4048,8 @@
   "skillBurger.pill.running": "En cours… {count}",
   "skillBurger.pill.stopped": "Arrêté",
   "skillBurger.pill.addPath": "Ajouter le chemin",
-  "skillBurger.card.madeBy": "Créé par {name}"
+  "skillBurger.card.madeBy": "Créé par {name}",
+  "panels.failure.paused": "En pause après 5 échecs d'affilée",
+  "panels.failure.noUpdate": "La dernière mise à jour n'a apporté aucune donnée nouvelle",
+  "panels.failure.engine": "Le bot de cette carte utilise un moteur qui ne prend pas encore en charge la mise à jour automatique"
 }

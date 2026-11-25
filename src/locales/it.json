@@ -11814,5 +11814,8 @@
   "skillBurger.pill.running": "In esecuzione… {count}",
   "skillBurger.pill.stopped": "Fermato",
   "skillBurger.pill.addPath": "Aggiungi percorso",
-  "skillBurger.card.madeBy": "Creato da {name}"
+  "skillBurger.card.madeBy": "Creato da {name}",
+  "panels.failure.paused": "In pausa dopo 5 errori di fila",
+  "panels.failure.noUpdate": "L'ultimo aggiornamento non ha portato dati nuovi",
+  "panels.failure.engine": "Il bot di questa scheda usa un motore che non supporta ancora l'aggiornamento automatico"
 }

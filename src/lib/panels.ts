@@ -13,7 +13,7 @@ import {
 
 export { PANEL_CADENCES, PANEL_CARD_FORMATS, PANEL_CARD_SIZES, PANEL_LIMITS, PANEL_SCHEDULES } from "../../shared/panels";
 export type {
-  Panel, PanelAlert, PanelAutomation, PanelCadence, PanelCard, PanelCardFormat, PanelCardSize, PanelCardUpdate, PanelEstimate,
+  Panel, PanelAlert, PanelAutomation, PanelCadence, PanelCard, PanelCardFormat, PanelCardSize, PanelCardUpdate, PanelEstimate, PanelFailureCode,
   PanelNewCardRequest, PanelPinnableBlock, PanelSchedule, PanelSuggestion, PanelSummary, PanelThumbKind, PanelVisibility,
 } from "../../shared/panels";
 

@@ -7866,5 +7866,8 @@
   "skillBurger.pill.running": "실행 중… {count}",
   "skillBurger.pill.stopped": "멈춤",
   "skillBurger.pill.addPath": "경로 추가",
-  "skillBurger.card.madeBy": "{name}이(가) 만듦"
+  "skillBurger.card.madeBy": "{name}이(가) 만듦",
+  "panels.failure.paused": "연속 5회 실패하여 일시 중지됨",
+  "panels.failure.noUpdate": "마지막 업데이트에서 새 데이터가 없었습니다",
+  "panels.failure.engine": "이 카드의 봇이 쓰는 엔진은 아직 자동 업데이트를 지원하지 않습니다"
 }

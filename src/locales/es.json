@@ -6643,5 +6643,8 @@
   "skillBurger.pill.running": "Ejecutando… {count}",
   "skillBurger.pill.stopped": "Detenido",
   "skillBurger.pill.addPath": "Añadir camino",
-  "skillBurger.card.madeBy": "Hecho por {name}"
+  "skillBurger.card.madeBy": "Hecho por {name}",
+  "panels.failure.paused": "En pausa tras 5 fallos seguidos",
+  "panels.failure.noUpdate": "La última actualización no trajo datos nuevos",
+  "panels.failure.engine": "El bot de esta tarjeta usa un motor que aún no admite la actualización automática"
 }
