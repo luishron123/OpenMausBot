@@ -267,7 +267,7 @@ describe("one panel", () => {
     expect([cardState("c1"), cardState("c2"), cardState("c3")]).toEqual(["ok", "failed", "waiting"]);
     const ok = host.querySelector('[data-panel-card="c1"]')!;
     expect(ok.textContent).toContain("42 orders");
-    expect(ok.querySelector("footer")?.textContent).toBe("12 min ago·Scout");
+    expect(ok.querySelector("footer")?.textContent).toBe("Scout·12 min ago");
     const failed = host.querySelector('[data-panel-card="c2"]')!;
     expect(failed.textContent).toContain("The store didn't answer.");
     expect(failed.textContent).toContain("42 orders");

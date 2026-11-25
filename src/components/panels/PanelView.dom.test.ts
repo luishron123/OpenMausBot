@@ -1,0 +1,336 @@
+// @vitest-environment happy-dom
+// One panel against a stand-in server: who sees it and the line under its title, organizing its cards (size, remove,
+// moving them by pointer and by keyboard), each card's footer, and New card with its test, add, cancel and pin.
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { Panel, PanelAutomation, PanelCard, PanelPinnableBlock } from "../../../shared/panels";
+import { panelSummary } from "../../../shared/panels";
+import { setLocale } from "@/lib/i18n";
+
+type MenuItem = { key: string; label: string; checked?: boolean; onSelect: () => void };
+const fixture = vi.hoisted(() => ({
+  dispatch: vi.fn(),
+  state: {
+    panelId: "p1" as string | undefined,
+    bots: [{ id: "scout", name: "Scout" }, { id: "nova", name: "Nova" }],
+    groups: [],
+    config: null,
+  },
+  menus: new Map<string, MenuItem[]>(),
+  frames: [] as Array<{ onFrame: (frame: { kind: string }) => void; onMissedFrames?: () => void }>,
+}));
+vi.mock("@/state/store-select", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/state/store-select")>(),
+  useStoreDispatch: () => fixture.dispatch,
+  useStoreSelector: <T,>(selector: (state: typeof fixture.state) => T) => selector(fixture.state),
+}));
+vi.mock("@/lib/thread-preferences", () => ({ useShowThreads: () => false }));
+vi.mock("@/lib/live-events", () => ({
+  listenLiveFrames: (listener: (typeof fixture.frames)[number]) => {
+    fixture.frames.push(listener);
+    return () => { fixture.frames.splice(fixture.frames.indexOf(listener), 1); };
+  },
+}));
+vi.mock("../Avatar", () => ({ BotAvatar: () => createElement("span", { "data-avatar": "" }) }));
+vi.mock("../SidebarPopoverMenu", () => ({
+  SidebarPopoverMenu: ({ items, ariaLabel }: { items: MenuItem[]; ariaLabel: string }) => {
+    fixture.menus.set(ariaLabel, items);
+    return createElement("button", { type: "button", "aria-label": ariaLabel });
+  },
+}));
+vi.mock("@/components/DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }), windowFramed: () => false }));
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const NOW = Date.now();
+const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
+const widget = (text: string) => ({ type: "Card", id: "root", children: [{ type: "Text", id: "n1", value: text }] });
+const card = (over: Partial<PanelCard>): PanelCard => ({
+  id: "c1", title: "Orders today", size: "s", position: 0, botId: "scout", updatedAt: ago(12), status: "ok", widget: widget("42 orders"), ...over,
+});
+const automation = (over: Partial<PanelAutomation> = {}): PanelAutomation => ({
+  routineId: "r1", name: "Morning numbers", botId: "scout", enabled: true, nextRunAt: new Date(NOW + 3_600_000).toISOString(), ...over,
+});
+
+let panels: Panel[];
+let blocks: PanelPinnableBlock[];
+const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+let host: HTMLDivElement;
+let root: Root;
+let PanelsPage: typeof import("./PanelsPage").PanelsPage;
+
+const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+function server(path: string, method: string, body: Record<string, unknown> | undefined): Response {
+  const parts = path.split("/").slice(3).map(decodeURIComponent);
+  if (parts.length === 0) return reply({ panels: panels.map(panelSummary) });
+  if (parts[0] === "pinnable") return reply({ blocks });
+  const panel = panels.find((item) => item.id === parts[0]);
+  if (!panel) return reply({ error: "No such panel" }, 404);
+  if (parts.length === 1 && method === "GET") return reply({ panel });
+  if (parts.length === 1 && method === "PATCH") { Object.assign(panel, body); return reply({ panel }); }
+  if (parts[1] === "order") {
+    const ids = body!.cardIds as string[];
+    panel.cards.forEach((item) => { item.position = ids.indexOf(item.id); });
+    return reply({ panel });
+  }
+  if (parts[2] === "new") {
+    const made = card({ id: "draft1", key: "orders-by-hour", title: (body!.title as string) || "Orders by hour", size: body!.size as PanelCard["size"], botId: body!.botId as string, widget: undefined, draft: true, position: 9 });
+    panel.cards.push(made);
+    return reply({ panel, card: made, routineId: "r9" }, 202);
+  }
+  if (parts[2] === "pin") {
+    const made = card({ id: "pinned1", title: "Pinned", position: 9, pinnedFrom: { threadId: body!.threadId as string, messageId: body!.messageId as string } });
+    panel.cards.push(made);
+    return reply({ panel, card: made });
+  }
+  if (parts[2] === "restore") { panel.cards.push(body!.card as PanelCard); return reply({ panel }); }
+  const target = panel.cards.find((item) => item.id === parts[2])!;
+  if (parts[3] === "keep") { delete target.draft; return reply({ panel }); }
+  if (method === "PATCH") { Object.assign(target, body); return reply({ panel }); }
+  panel.cards = panel.cards.filter((item) => item !== target);
+  return reply({ panel, card: target });
+}
+
+beforeEach(async () => {
+  setLocale("en");
+  vi.resetModules();
+  fixture.dispatch.mockReset();
+  fixture.state.panelId = "p1";
+  fixture.menus.clear();
+  fixture.frames.length = 0;
+  calls.length = 0;
+  blocks = [{ threadId: "t7", messageId: "m3", botId: "nova", title: "Weekly signups", at: ago(30), text: "312 this week" }];
+  panels = [
+    {
+      id: "p1", title: "Store health", createdBy: { botId: "scout", threadId: "t1" }, createdAt: ago(600), updatedAt: ago(12), position: 0,
+      cards: [
+        card({ key: "orders" }),
+        card({ id: "c2", key: "refunds", title: "Refunds", size: "m", position: 1, botId: "nova" }),
+        card({ id: "c3", title: "Ad spend", size: "l", position: 2 }),
+        card({ id: "old-draft", title: "Left over", position: 3, draft: true }),
+      ],
+      automations: [automation({ cardKey: "refunds", botId: "nova", cadence: "daily", running: true })],
+    },
+    { id: "p2", title: "Marketing", createdBy: { botId: "nova" }, createdAt: ago(60), updatedAt: ago(90), position: 1, cards: [], visibility: "private" },
+  ];
+  vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    const url = new URL(input, "http://x");
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+    calls.push({ method, path: url.pathname, body });
+    return Promise.resolve(server(url.pathname, method, body));
+  }));
+  ({ PanelsPage } = await import("./PanelsPage"));
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  host.remove();
+  document.body.replaceChildren();
+  vi.unstubAllGlobals();
+});
+
+const settle = async () => { for (let round = 0; round < 8; round += 1) await act(async () => { await Promise.resolve(); }); };
+const show = async () => { act(() => root.render(createElement(PanelsPage))); await settle(); };
+const all = () => [...document.querySelectorAll("button")];
+const button = (name: string) => all().find((item) => item.textContent?.trim() === name || item.getAttribute("aria-label") === name);
+const order = () => [...host.querySelectorAll("[data-panel-card]")].map((item) => item.getAttribute("data-panel-card"));
+const posted = (path: string) => calls.filter((call) => call.method === "POST" && call.path === path);
+const frame = () => act(() => fixture.frames.forEach((listener) => listener.onFrame({ kind: "panels.changed", panelId: "p1" } as { kind: string })));
+const type = (element: HTMLInputElement | HTMLTextAreaElement, value: string) => act(() => {
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")!.set!;
+  setter.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+});
+const choose = (element: HTMLSelectElement, value: string) => act(() => {
+  element.value = value;
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+});
+const pointer = (target: Element, kind: string, x: number, y: number) => act(() => {
+  target.dispatchEvent(new PointerEvent(kind, { bubbles: true, pointerId: 1, button: 0, clientX: x, clientY: y }));
+});
+
+describe("the line under the title", () => {
+  it("says who sees it, who made it, how many cards it has and when it changed, leaving test cards out", async () => {
+    await show();
+    const meta = host.querySelector("[data-panel-meta]")!;
+    expect(meta.querySelector("[data-panel-visibility]")?.textContent).toBe("Shared");
+    expect(meta.textContent).toContain("Made by Scout");
+    expect(meta.textContent).toContain("3 cards");
+    expect(meta.textContent).toContain("Updated 12 min ago");
+    expect(order()).toEqual(["c1", "c2", "c3"]);
+  });
+
+  it("Share changes who sees the panel", async () => {
+    await show();
+    act(() => button("Share")!.click());
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Everyone who can see Scout.");
+    act(() => (document.querySelector('[data-panel-share="private"]') as HTMLButtonElement).click());
+    act(() => button("Save")!.click());
+    await settle();
+    expect(calls.find((call) => call.method === "PATCH")).toEqual({ method: "PATCH", path: "/api/panels/p1", body: { visibility: "private" } });
+    frame();
+    await settle();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.querySelector("[data-panel-visibility]")?.textContent).toBe("Only you");
+  });
+});
+
+describe("each card's footer", () => {
+  it("names the bot that keeps it, when it changed and how often, and marks only the running card updating", async () => {
+    await show();
+    const footer = (id: string) => host.querySelector(`[data-panel-card="${id}"] [data-panel-card-footer]`)!.textContent;
+    expect(footer("c1")).toBe("Scout·12 min ago·when asked");
+    expect(footer("c2")).toBe("Nova·Updating…·daily");
+    expect(host.querySelector('[data-panel-card="c2"]')!.getAttribute("data-panel-card-state")).toBe("updating");
+    expect(host.querySelector('[data-panel-card="c1"]')!.getAttribute("data-panel-card-state")).toBe("ok");
+  });
+
+  it("follows an automation that keeps the whole panel, in the routine's own words when it is not a plain cadence", async () => {
+    panels[0]!.automations = [automation({ cadence: "custom", scheduleText: "Weekdays at 9:00" })];
+    await show();
+    expect(host.querySelector('[data-panel-card="c3"] [data-panel-card-cadence]')!.textContent).toBe("Weekdays at 9:00");
+  });
+});
+
+describe("organizing", () => {
+  it("trades each card's menu for size, remove and a handle, and Done leaves", async () => {
+    await show();
+    expect(fixture.menus.has("More for Orders today")).toBe(true);
+    act(() => button("Organize")!.click());
+    fixture.menus.clear();
+    await settle();
+    const first = host.querySelector('[data-panel-card="c1"]')!;
+    expect(first.querySelector("[data-panel-card-handle]")).not.toBeNull();
+    act(() => (first.querySelector("[data-panel-card-size]") as HTMLButtonElement).click());
+    await settle();
+    expect(calls.find((call) => call.method === "PATCH")).toEqual({ method: "PATCH", path: "/api/panels/p1/cards/c1", body: { size: "m" } });
+    act(() => button("Remove Ad spend from the panel")!.click());
+    await settle();
+    expect(order()).toEqual(["c1", "c2"]);
+    act(() => button("Undo")!.click());
+    await settle();
+    expect(order()).toEqual(["c1", "c2", "c3"]);
+    act(() => button("Done")!.click());
+    expect(host.querySelector("[data-panel-card-handle]")).toBeNull();
+    expect(fixture.menus.has("More for Orders today")).toBe(true);
+  });
+
+  it("moves a card with the arrow keys and saves the order, keeping focus on its handle", async () => {
+    await show();
+    act(() => button("Organize")!.click());
+    const handle = host.querySelector('[data-panel-card="c1"] [data-panel-card-handle]') as HTMLButtonElement;
+    act(() => handle.focus());
+    act(() => { handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
+    await settle();
+    expect(order()).toEqual(["c2", "c1", "c3"]);
+    expect(posted("/api/panels/p1/order").map((call) => call.body)).toEqual([{ cardIds: ["c2", "c1", "c3"] }]);
+    expect(document.activeElement?.closest("[data-panel-card]")?.getAttribute("data-panel-card")).toBe("c1");
+    expect(host.textContent).toContain("Orders today moved to position 2 of 3.");
+    act(() => { (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })); });
+    await settle();
+    expect(order()).toEqual(["c2", "c3", "c1"]);
+  });
+
+  it("drags a card over another to take its place, and saves once on release", async () => {
+    await show();
+    act(() => button("Organize")!.click());
+    const boxes: Record<string, [number, number]> = { c1: [0, 100], c2: [100, 300], c3: [300, 500] };
+    for (const element of host.querySelectorAll<HTMLElement>("[data-panel-card]")) {
+      const [left, right] = boxes[element.getAttribute("data-panel-card")!]!;
+      element.getBoundingClientRect = () => ({ left, right, top: 0, bottom: 100, width: right - left, height: 100, x: left, y: 0, toJSON: () => ({}) });
+    }
+    const handle = host.querySelector('[data-panel-card="c1"] [data-panel-card-handle]')!;
+    pointer(handle, "pointerdown", 50, 10);
+    expect(host.querySelector('[data-panel-card="c1"]')!.getAttribute("data-panel-card-dragging")).toBe("true");
+    pointer(handle, "pointermove", 400, 50);
+    expect(order()).toEqual(["c2", "c3", "c1"]);
+    expect(posted("/api/panels/p1/order")).toHaveLength(0);
+    pointer(handle, "pointerup", 400, 50);
+    await settle();
+    expect(posted("/api/panels/p1/order").map((call) => call.body)).toEqual([{ cardIds: ["c2", "c3", "c1"] }]);
+  });
+});
+
+describe("New card", () => {
+  const open = async () => {
+    await show();
+    act(() => button("Card")!.click());
+    return document.querySelector('[role="dialog"]')!;
+  };
+
+  it("tests the card with the bot that made the panel, shows it fill in, then adds it to the chosen panel", async () => {
+    const dialog = await open();
+    expect(dialog.querySelector("h2")?.textContent).toBe("New card");
+    const test = dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement;
+    expect(test.disabled).toBe(true);
+    const selects = [...dialog.querySelectorAll("select")];
+    const bot = selects.find((item) => item.getAttribute("aria-label") === "Bot that keeps it")!;
+    expect(bot.value).toBe("scout");
+    expect(bot.selectedOptions[0]!.textContent).toBe("Scout (suggested)");
+    type(dialog.querySelector("textarea")!, "Orders per hour today");
+    choose(selects.find((item) => item.getAttribute("aria-label") === "Format")!, "bar");
+    choose(selects.find((item) => item.getAttribute("aria-label") === "How often")!, "daily");
+    act(() => (dialog.querySelector("[data-panel-new-notify]") as HTMLButtonElement).click());
+    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/new").map((call) => call.body)).toEqual([
+      { prompt: "Orders per hour today", format: "bar", size: "m", botId: "scout", cadence: "daily", notify: true, test: true },
+    ]);
+    frame();
+    await settle();
+    const preview = document.querySelector("[data-panel-new-preview]")!;
+    expect(preview.textContent).toContain("Waiting for the first update…");
+    expect(order()).toEqual(["c1", "c2", "c3"]);
+    panels[0]!.cards.find((item) => item.id === "draft1")!.widget = widget("18 orders at 10:00");
+    frame();
+    await settle();
+    expect(preview.textContent).toContain("18 orders at 10:00");
+    choose([...dialog.querySelectorAll("select")].find((item) => item.getAttribute("aria-label") === "Add to")!, "p2");
+    act(() => (dialog.querySelector('[data-panel-new="add"]') as HTMLButtonElement).click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/draft1/keep").map((call) => call.body)).toEqual([{ panelId: "p2" }]);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false);
+  });
+
+  it("asks for a new test after a change, and drops the test card when cancelled", async () => {
+    const dialog = await open();
+    type(dialog.querySelector("textarea")!, "Refunds this week");
+    act(() => (dialog.querySelector('[data-panel-new="test"]') as HTMLButtonElement).click());
+    await settle();
+    expect(dialog.querySelector('[data-panel-new="add"]')).not.toBeNull();
+    type(dialog.querySelector("textarea")!, "Refunds this month");
+    expect(dialog.querySelector('[data-panel-new="test"]')?.textContent).toBe("Test again");
+    act(() => button("Cancel")!.click());
+    await settle();
+    expect(calls.filter((call) => call.method === "DELETE").map((call) => call.path)).toEqual(["/api/panels/p1/cards/draft1"]);
+  });
+
+  it("pins a block a bot already posted in a chat", async () => {
+    const dialog = await open();
+    act(() => (dialog.querySelector("[data-panel-new-pin]") as HTMLButtonElement).click());
+    await settle();
+    const block = document.querySelector('[data-panel-pin="t7/m3"]') as HTMLButtonElement;
+    expect(block.textContent).toContain("Weekly signups");
+    expect(block.textContent).toContain("Nova");
+    act(() => block.click());
+    await settle();
+    expect(posted("/api/panels/p1/cards/pin").map((call) => call.body)).toEqual([{ threadId: "t7", messageId: "m3", size: "m" }]);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("says so when there is nothing to pin yet", async () => {
+    blocks = [];
+    const dialog = await open();
+    act(() => (dialog.querySelector("[data-panel-new-pin]") as HTMLButtonElement).click());
+    await settle();
+    expect(document.querySelector("[data-panel-pin-empty]")?.textContent).toBe("No blocks in your chats yet.");
+  });
+});

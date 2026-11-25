@@ -4,10 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { listenLiveFrames } from "@/lib/live-events";
 import { api, ApiError } from "@/state/api";
-import { PANELS_PATH, type Panel, type PanelCard, type PanelCardSize, type PanelsChangedFrame, type PanelSummary } from "../../shared/panels";
+import {
+  PANELS_PATH,
+  type Panel, type PanelAutomation, type PanelCard, type PanelCardSize, type PanelNewCardRequest, type PanelPinnableBlock,
+  type PanelsChangedFrame, type PanelSummary, type PanelVisibility,
+} from "../../shared/panels";
 
-export { PANEL_CARD_SIZES } from "../../shared/panels";
-export type { Panel, PanelAutomation, PanelCard, PanelCardSize, PanelSummary } from "../../shared/panels";
+export { PANEL_CADENCES, PANEL_CARD_FORMATS, PANEL_CARD_SIZES } from "../../shared/panels";
+export type {
+  Panel, PanelAutomation, PanelCadence, PanelCard, PanelCardFormat, PanelCardSize, PanelNewCardRequest, PanelPinnableBlock,
+  PanelSummary, PanelVisibility,
+} from "../../shared/panels";
 
 const CHANGED = "omb:panels-changed";
 
@@ -155,3 +162,53 @@ export async function refreshPanel(id: string, routineId?: string): Promise<void
 
 /** True while one of the panel's automations is running, so its cards are about to change. */
 export const panelUpdating = (panel: Pick<Panel, "automations">): boolean => (panel.automations ?? []).some((automation) => automation.running === true);
+
+/** A card is updating while an automation that keeps it runs: its own, or one that keeps the whole panel. */
+export const cardUpdating = (panel: Pick<Panel, "automations">, card: Pick<PanelCard, "key">): boolean =>
+  (panel.automations ?? []).some((automation) => automation.running === true && (!automation.cardKey || automation.cardKey === card.key));
+
+export async function setPanelVisibility(id: string, visibility: PanelVisibility): Promise<Panel> {
+  const { panel } = await api<{ panel: Panel }>(panelPath(id), { method: "PATCH", body: JSON.stringify({ visibility }) });
+  return kept(panel);
+}
+
+export async function orderCards(id: string, cardIds: string[]): Promise<Panel> {
+  const { panel } = await api<{ panel: Panel }>(`${panelPath(id)}/order`, { method: "POST", body: JSON.stringify({ cardIds }) });
+  return kept(panel);
+}
+
+/** Makes the card and the automation that keeps it, and starts its first run; a `test` card is a draft. */
+export async function newCard(id: string, request: PanelNewCardRequest): Promise<{ panel: Panel; card: PanelCard; routineId: string }> {
+  const result = await api<{ panel: Panel; card: PanelCard; routineId: string }>(`${panelPath(id)}/cards/new`, { method: "POST", body: JSON.stringify(request) });
+  kept(result.panel);
+  return result;
+}
+
+/** Adds a draft to the panel; a different `toPanelId` moves it, with its automation, to that panel. */
+export async function keepCard(id: string, cardId: string, toPanelId?: string): Promise<Panel> {
+  const body = toPanelId && toPanelId !== id ? { panelId: toPanelId } : {};
+  const { panel } = await api<{ panel: Panel }>(`${cardPath(id, cardId)}/keep`, { method: "POST", body: JSON.stringify(body) });
+  if (panel.id !== id) changed(id);
+  return kept(panel);
+}
+
+export async function pinnableBlocks(limit = 30): Promise<PanelPinnableBlock[]> {
+  const { blocks } = await api<{ blocks: PanelPinnableBlock[] }>(`${PANELS_PATH}/pinnable?limit=${limit}`);
+  return blocks ?? [];
+}
+
+export async function pinBlock(id: string, block: { threadId: string; messageId: string }, size?: PanelCardSize): Promise<{ panel: Panel; card: PanelCard }> {
+  const result = await api<{ panel: Panel; card: PanelCard }>(`${panelPath(id)}/cards/pin`, {
+    method: "POST",
+    body: JSON.stringify({ threadId: block.threadId, messageId: block.messageId, ...(size ? { size } : {}) }),
+  });
+  kept(result.panel);
+  return result;
+}
+
+/** The automation that keeps a card: its own (by card key) first, else one that keeps the whole panel. */
+export function cardAutomation(panel: Panel, card: PanelCard): PanelAutomation | undefined {
+  const automations = (panel.automations ?? []).filter((automation) => automation.enabled);
+  return (card.key ? automations.find((automation) => automation.cardKey === card.key) : undefined)
+    ?? automations.find((automation) => !automation.cardKey);
+}
