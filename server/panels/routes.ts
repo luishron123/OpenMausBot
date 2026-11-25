@@ -3,11 +3,13 @@
 // own owner, always has it); seeing one needs at least view. With `features.panels` off every route answers 404.
 import { z } from "zod";
 
-import { PANEL_CARD_SIZES, PANEL_LIMITS, PANELS_PATH, panelSummary, type Panel, type PanelAutomation, type PanelCard } from "../../shared/panels.ts";
+import { PANEL_CARD_SIZES, PANEL_LIMITS, PANEL_SCHEDULES, PANEL_VISIBILITIES, PANELS_PATH, panelSummary, type Panel, type PanelCard } from "../../shared/panels.ts";
 import type { BotAccessLevel } from "../../shared/bot-access.ts";
 import { canonicalWidget } from "../chat-widgets.ts";
 import type { RequestAuth } from "../request-auth.ts";
+import { redactSecretsInText } from "../redact.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
+import type { PanelCards } from "./cards.ts";
 import { parseCard, parsePanel, type PanelStore, type PanelsResult } from "./store.ts";
 
 export interface PanelRouteDeps {
@@ -16,15 +18,21 @@ export interface PanelRouteDeps {
   enabled(): boolean;
   /** What this person may do with a bot. */
   levelOf(auth: RequestAuth, botId: string): BotAccessLevel;
-  /** The automations linked to a panel, as this person may see them. */
-  automations?(auth: RequestAuth, panel: Panel): PanelAutomation[];
+  /** A panel as this person's screen reads it: the automations that keep it, as they may see them, filled in. */
+  present?(auth: RequestAuth, panel: Panel): Panel;
+  /** Cards' own automations: changed with the card, paused with its removal and back on with its Undo. */
+  cards?: PanelCards;
   /** Runs a linked automation now. */
   refresh?(auth: RequestAuth, panel: Panel, routineId?: string): { ok: true } | { ok: false; status: 400 | 404 | 409; error: string };
 }
 
 const title = z.string().trim().min(1).max(PANEL_LIMITS.title);
-const patchBody = z.object({ title: title.optional(), about: z.string().trim().max(PANEL_LIMITS.about).optional() }).strict();
-const cardPatchBody = z.object({ title: title.optional(), size: z.enum(PANEL_CARD_SIZES).optional() }).strict();
+const patchBody = z.object({ title: title.optional(), about: z.string().trim().max(PANEL_LIMITS.about).optional(), visibility: z.enum(PANEL_VISIBILITIES).optional() }).strict();
+const cardPatchBody = z.object({
+  title: title.optional(), size: z.enum(PANEL_CARD_SIZES).optional(),
+  prompt: z.string().trim().max(PANEL_LIMITS.prompt).optional(), schedule: z.enum(PANEL_SCHEDULES).optional(),
+  alert: z.string().trim().max(PANEL_LIMITS.alert).optional(), notify: z.boolean().optional(), botId: z.string().min(1).max(100).optional(),
+}).strict();
 const restoreBody = z.object({ panel: z.unknown() }).strict();
 const cardRestoreBody = z.object({ card: z.unknown() }).strict();
 const refreshBody = z.object({ routineId: z.string().min(1).max(100).optional() }).strict();
@@ -49,7 +57,7 @@ export function createPanelRoutes(deps: PanelRouteDeps): RouteHandler {
   const level = (auth: RequestAuth, panel: Pick<Panel, "createdBy">) => (auth.scopes.includes("admin") ? "edit" : deps.levelOf(auth, panel.createdBy.botId));
   const sees = (auth: RequestAuth, panel: Pick<Panel, "createdBy">) => level(auth, panel) !== "none";
   const changes = (auth: RequestAuth, panel: Pick<Panel, "createdBy">) => ["chat", "edit"].includes(level(auth, panel));
-  const withAutomations = (auth: RequestAuth, panel: Panel): Panel => ({ ...panel, automations: deps.automations?.(auth, panel) ?? [] });
+  const withAutomations = (auth: RequestAuth, panel: Panel): Panel => deps.present?.(auth, panel) ?? { ...panel, automations: [] };
 
   return async ({ req, res, path, method, auth, json, readBody }) => {
     if (path !== PANELS_PATH && !path.startsWith(`${PANELS_PATH}/`)) return PASS;
@@ -104,7 +112,9 @@ export function createPanelRoutes(deps: PanelRouteDeps): RouteHandler {
       if (!sent) return;
       const card = cleanCard(sent.card);
       if (!card) return json(res, 400, { error: "That is not a card this server can put back." });
-      return answer(store.restoreCard(panel.id, card), (done) => ({ panel: withAutomations(auth, done.panel) }));
+      const restored = store.restoreCard(panel.id, card);
+      if (restored.ok) deps.cards?.restored(card);
+      return answer(restored, (done) => ({ panel: withAutomations(auth, done.panel) }));
     }
 
     const refresh = REFRESH.exec(path);
@@ -125,12 +135,33 @@ export function createPanelRoutes(deps: PanelRouteDeps): RouteHandler {
       if (!panel) return;
       const cardId = card[2]!;
       if (method === "PATCH") {
-        const sent = await body(cardPatchBody, "Send title or size (s, m or l).");
+        const sent = await body(cardPatchBody, "Send title, size (s, m or l), prompt, schedule, alert, notify or botId.");
         if (!sent) return;
-        return answer(store.patchCard(panel.id, cardId, sent), (done) => ({ panel: withAutomations(auth, done.panel) }));
+        if (sent.botId && !(auth.scopes.includes("admin") || ["chat", "edit"].includes(deps.levelOf(auth, sent.botId)))) {
+          return json(res, 403, { error: "You can only give a card to a bot you can chat with." });
+        }
+        const refusal = deps.cards?.limitRefusal(cardId, sent.schedule);
+        if (refusal) return json(res, 409, { error: `There are already ${PANEL_LIMITS.scheduledCards} cards that update by themselves. Choose Manual, or remove a scheduled card first.` });
+        const { title: newTitle, size, botId, prompt, schedule, alert, notify } = sent;
+        const patched = store.patchCard(panel.id, cardId, {
+          ...(newTitle !== undefined ? { title: newTitle } : {}), ...(size ? { size } : {}), ...(botId ? { botId } : {}),
+          extra: {
+            ...(prompt !== undefined ? { prompt: prompt ? redactSecretsInText(prompt) : null } : {}), ...(schedule ? { schedule } : {}),
+            ...(alert !== undefined ? { alert: alert ? redactSecretsInText(alert) : null } : {}), ...(notify !== undefined ? { notify } : {}),
+          },
+        });
+        if (!patched.ok) return json(res, patched.status, { error: patched.error });
+        const automated = [prompt, schedule, alert, botId, newTitle].some((one) => one !== undefined) && (patched.card.prompt || patched.card.routineId);
+        if (automated && deps.cards) {
+          const synced = deps.cards.syncOwn(panel.id, cardId, botId ? { botId } : {});
+          if (!synced.ok) return json(res, synced.status, { error: synced.error });
+        }
+        return json(res, 200, { panel: withAutomations(auth, store.get(panel.id)!) });
       }
       if (method === "DELETE") {
-        return answer(store.removeCard(panel.id, cardId), (done) => ({ panel: withAutomations(auth, done.panel), card: done.card }));
+        const removed = store.removeCard(panel.id, cardId);
+        if (removed.ok) deps.cards?.removed(removed.panel, removed.card);
+        return answer(removed, (done) => ({ panel: withAutomations(auth, done.panel), card: done.card }));
       }
       return json(res, 405, { error: "Use PATCH or DELETE." });
     }

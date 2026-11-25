@@ -36,15 +36,18 @@ describe("panels.json", () => {
     expect(panelsEnabled({ features: { panels: false } })).toBe(false);
   });
 
-  it("makes a panel once per key and tells who listens", () => {
+  it("makes a panel once per key, takes the title, about and visibility sent again, and tells who listens", () => {
     const { store, changes } = storeIn();
     const first = made(store.create({ title: "Daily sales", key: "daily-sales", createdBy: author }));
     expect(first.created).toBe(true);
     expect(first.panel.id).toMatch(/^pnl_[a-z0-9]{16}$/);
     const again = made(store.create({ title: "Another title", key: "daily-sales", createdBy: { botId: "other" } }));
-    expect(again).toMatchObject({ created: false, panel: { id: first.panel.id, title: "Daily sales" } });
+    expect(again).toMatchObject({ created: false, panel: { id: first.panel.id, title: "Another title", createdBy: author } });
     expect(store.list()).toHaveLength(1);
-    expect(changes).toEqual([{ panelId: first.panel.id, botId: "scout" }, { panelId: first.panel.id, botId: "scout" }]);
+    expect(made(store.create({ title: "Another title", key: "daily-sales", visibility: "private", createdBy: author })).panel.visibility).toBe("private");
+    expect(made(store.create({ title: "Another title", key: "daily-sales", visibility: "shared", createdBy: author })).panel.visibility).toBeUndefined();
+    expect(changes).toHaveLength(4);
+    expect(new Set(changes.map((one) => JSON.stringify(one)))).toEqual(new Set([JSON.stringify({ panelId: first.panel.id, botId: "scout" })]));
   });
 
   it("is written whole, readable only by its owner, and read again when changed on disk", () => {
@@ -159,5 +162,66 @@ describe("panels.json", () => {
     expect(store.get(panel.id)!.about).toBeUndefined();
     const patched = made(store.patchCard(panel.id, card.id, { size: "l" })).card;
     expect(patched).toEqual({ ...card, size: "l" });
+  });
+});
+
+describe("cards beyond one panel", () => {
+  it("keeps a private panel's visibility, and drops the field when it is shared again", () => {
+    const { store, file } = storeIn();
+    const panel = made(store.create({ title: "Mine", visibility: "private", createdBy: author })).panel;
+    expect(store.get(panel.id)!.visibility).toBe("private");
+    made(store.patch(panel.id, { visibility: "shared" }));
+    expect(store.get(panel.id)!.visibility).toBeUndefined();
+    expect(readFileSync(file, "utf8")).not.toContain("visibility");
+  });
+
+  it("orders the cards the person sends, keeps drafts after them, and teaches what is wrong", () => {
+    const { store } = storeIn();
+    const panel = made(store.create({ title: "Sales", createdBy: author })).panel;
+    const [a, b, c] = ["a", "b", "c"].map((key) => made(store.setCard(panel.id, { key, title: key, content: content(key), botId: "scout" })).card);
+    const draft = made(store.setCard(panel.id, { key: "d", title: "d", botId: "scout", extra: { draft: true, draftAt: new Date().toISOString(), building: true } })).card;
+    const ordered = made(store.order(panel.id, [c!.id, a!.id, b!.id])).panel;
+    expect(ordered.cards.map((card) => card.key)).toEqual(["c", "a", "b", "d"]);
+    expect(ordered.cards.map((card) => card.position)).toEqual([0, 1, 2, 3]);
+    expect(store.order(panel.id, [c!.id, a!.id])).toMatchObject({ ok: false, status: 400, error: expect.stringContaining("every card") });
+    expect(store.order(panel.id, [c!.id, c!.id, a!.id, b!.id])).toMatchObject({ ok: false, status: 400 });
+    expect(store.order(panel.id, [c!.id, a!.id, b!.id, "card_nope"])).toMatchObject({ ok: false, status: 400 });
+    expect(store.order(panel.id, [draft.id, c!.id, a!.id, b!.id]).ok).toBe(true);
+  });
+
+  it("moves a card to another panel under a free key, and tells both panels", () => {
+    const { store, changes } = storeIn();
+    const one = made(store.create({ title: "One", createdBy: author })).panel;
+    const two = made(store.create({ title: "Two", createdBy: author })).panel;
+    const card = made(store.setCard(one.id, { key: "revenue", title: "Revenue", content: content("$1"), botId: "scout", extra: { draft: true, draftAt: new Date().toISOString() } })).card;
+    made(store.setCard(two.id, { key: "revenue", title: "Revenue", content: content("$2"), botId: "scout" }));
+    changes.splice(0);
+    const moved = made(store.moveCard(one.id, card.id, two.id, { draft: null, draftAt: null }));
+    expect(moved.card).toMatchObject({ id: card.id, key: "revenue-2" });
+    expect(moved.card.draft).toBeUndefined();
+    expect(store.get(one.id)!.cards).toEqual([]);
+    expect(store.get(two.id)!.cards.map((one) => one.key)).toEqual(["revenue", "revenue-2"]);
+    expect(changes.map((change) => change.panelId).sort()).toEqual([one.id, two.id].sort());
+  });
+
+  it("sweeps only drafts made before the cutoff", () => {
+    const { store } = storeIn();
+    const panel = made(store.create({ title: "Sales", createdBy: author })).panel;
+    made(store.setCard(panel.id, { key: "old", title: "Old", botId: "scout", extra: { draft: true, draftAt: "2026-11-25T08:00:00.000Z" } }));
+    made(store.setCard(panel.id, { key: "new", title: "New", botId: "scout", extra: { draft: true, draftAt: "2026-11-25T10:30:00.000Z" } }));
+    made(store.setCard(panel.id, { key: "kept", title: "Kept", content: content("1"), botId: "scout" }));
+    const gone = store.sweepDrafts(Date.parse("2026-11-25T10:00:00.000Z"));
+    expect(gone.map((one) => one.card.key)).toEqual(["old"]);
+    expect(store.get(panel.id)!.cards.map((card) => card.key)).toEqual(["new", "kept"]);
+    expect(store.sweepDrafts(Date.parse("2026-11-25T10:00:00.000Z"))).toEqual([]);
+  });
+
+  it("keeps a card's content when it is set again with only a prompt", () => {
+    const { store } = storeIn();
+    const panel = made(store.create({ title: "Sales", createdBy: author })).panel;
+    made(store.setCard(panel.id, { key: "revenue", title: "Revenue", content: content("$1"), botId: "scout" }));
+    const again = made(store.setCard(panel.id, { key: "revenue", title: "Revenue", botId: "scout", extra: { prompt: "Revenue", schedule: "hour" } }));
+    expect(again.card).toMatchObject({ text: "$1", prompt: "Revenue", schedule: "hour" });
+    expect(again.previous?.text).toBe("$1");
   });
 });

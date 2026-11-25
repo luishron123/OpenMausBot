@@ -166,7 +166,7 @@ it("fills the automations on one panel and runs one now when asked", async () =>
   const ran: (string | undefined)[] = [];
   const { api, store } = await serve({
     extra: {
-      automations: () => [{ routineId: "rtn_1", name: "Morning sales", botId: "scout", enabled: true, running: false, lastRunUpdatedNothing: false }],
+      present: (_auth, panel) => ({ ...panel, automations: [{ routineId: "rtn_1", name: "Morning sales", botId: "scout", enabled: true, nextRunAt: null, lastRunAt: null, running: false, lastRunUpdatedNothing: false }] }),
       refresh: (_auth, _panel, routineId) => (routineId === "rtn_nope" ? { ok: false, status: 404, error: "No such automation on this panel." } : (ran.push(routineId), { ok: true })),
     },
   });

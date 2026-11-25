@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { PANEL_CARD_SIZES, PANEL_KEY, PANEL_LIMITS, PANELS_VERSION, type Panel, type PanelCard, type PanelCardSize } from "../../shared/panels.ts";
+import { PANEL_CARD_SIZES, PANEL_KEY, PANEL_LIMITS, PANEL_VISIBILITIES, PANELS_VERSION, type Panel, type PanelCard, type PanelCardSize, type PanelVisibility } from "../../shared/panels.ts";
 import type { WidgetRoot } from "../../shared/widget.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { redactSecretsInText } from "../redact.ts";
@@ -43,6 +43,7 @@ export const panelSchema = z.looseObject({
   createdAt: stamp, updatedAt: stamp,
   position: z.number().int().min(0),
   cards: z.array(z.unknown()).max(PANEL_LIMITS.cardsPerPanel),
+  visibility: z.enum(PANEL_VISIBILITIES).optional(),
 });
 const fileSchema = z.object({ version: z.literal(PANELS_VERSION), panels: z.array(z.unknown()) });
 
@@ -100,6 +101,30 @@ export interface PanelsChange {
   removed?: true;
 }
 
+/** What the person or the server set on a card beside its content; `null` removes a field. */
+export type CardExtra = { [K in "draft" | "draftAt" | "prompt" | "format" | "notify" | "pinnedFrom" | "schedule" | "routineId" | "alert" | "alertActive" | "sources" | "building" | "held"]?: PanelCard[K] | null };
+
+const EXTRA_KEYS = ["draft", "draftAt", "prompt", "format", "notify", "pinnedFrom", "schedule", "routineId", "alert", "alertActive", "sources", "building", "held"] as const;
+
+function applyExtra(card: PanelCard, extra: CardExtra | undefined): void {
+  if (!extra) return;
+  for (const key of EXTRA_KEYS) {
+    if (!Object.hasOwn(extra, key)) continue;
+    const value = extra[key];
+    if (value === null || value === undefined || value === false) delete card[key];
+    else (card as unknown as Record<string, unknown>)[key] = value;
+  }
+}
+
+/** A card's key nobody on this panel has yet, from `base`. */
+export function freeCardKey(panel: Pick<Panel, "cards">, base = "card"): string {
+  const stem = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "card";
+  for (let n = 0; ; n += 1) {
+    const key = n ? `${stem}-${n + 1}` : stem;
+    if (!panel.cards.some((card) => card.key === key)) return key;
+  }
+}
+
 export interface CardContent {
   widget: WidgetRoot;
   text: string;
@@ -111,6 +136,11 @@ const tooBig = (card: PanelCard) => byteLength(card) > PANEL_LIMITS.cardBytes;
 const TOO_BIG = `widget: this card is over ${PANEL_LIMITS.cardBytes / 1000} KB; show fewer rows or shorter text.`;
 const newId = (prefix: string) => `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 const nextPosition = (items: ReadonlyArray<{ position: number }>) => items.reduce((top, item) => Math.max(top, item.position + 1), 0);
+/** "shared" is stored as no field, so an older build reads the panel as it always did. */
+const setVisibility = (panel: Panel, visibility: PanelVisibility) => {
+  if (visibility === "private") panel.visibility = "private";
+  else delete panel.visibility;
+};
 const clip = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
 
 export interface PanelStoreOptions {
@@ -183,27 +213,37 @@ export function createPanelStore(options: PanelStoreOptions) {
       return load().panels.find((panel) => panel.key === panelKey);
     },
 
-    /** With a key some panel already has, that panel comes back unchanged and `created` is false. */
-    create(input: { title: string; about?: string; key?: string; createdBy: Panel["createdBy"] }): PanelsResult<{ panel: Panel; created: boolean }> {
+    /** With a key some panel already has, that panel comes back with the title, about and visibility sent, and `created`
+     * is false. */
+    create(input: { title: string; about?: string; key?: string; visibility?: PanelVisibility; createdBy: Panel["createdBy"] }): PanelsResult<{ panel: Panel; created: boolean }> {
       return change((panels) => {
         const existing = input.key ? panels.find((panel) => panel.key === input.key) : undefined;
-        if (existing) return { ok: true, panel: existing, created: false, change: { panelId: existing.id, botId: existing.createdBy.botId } };
+        if (existing) {
+          const same = existing.title === input.title && (input.about === undefined || existing.about === input.about) && (input.visibility === undefined || (existing.visibility ?? "shared") === input.visibility);
+          if (same) return { ok: true, panel: existing, created: false, change: { panelId: existing.id, botId: existing.createdBy.botId } };
+          existing.title = input.title;
+          if (input.about !== undefined) existing.about = input.about;
+          if (input.visibility !== undefined) setVisibility(existing, input.visibility);
+          return { ok: true, panel: existing, created: false, change: touched(existing, now()) };
+        }
         if (panels.length >= PANEL_LIMITS.panels) return fail(409, `There are already ${PANEL_LIMITS.panels} panels. Ask the person to remove one in Panels, or reuse one from list_panels.`);
         const at = now();
         const panel: Panel = {
           id: newId("pnl"), ...(input.key ? { key: input.key } : {}), title: input.title, ...(input.about ? { about: input.about } : {}),
           createdBy: input.createdBy, createdAt: at, updatedAt: at, position: nextPosition(panels), cards: [],
+          ...(input.visibility === "private" ? { visibility: "private" as const } : {}),
         };
         panels.push(panel);
         return { ok: true, panel, created: true, change: { panelId: panel.id, botId: panel.createdBy.botId } };
       });
     },
 
-    patch(panelId: string, input: { title?: string; about?: string }): PanelsResult<{ panel: Panel }> {
+    patch(panelId: string, input: { title?: string; about?: string; visibility?: PanelVisibility }): PanelsResult<{ panel: Panel }> {
       return change((panels) => {
         const panel = findPanel(panels, panelId);
         if (!panel) return fail(404, "No such panel.");
         if (input.title !== undefined) panel.title = input.title;
+        if (input.visibility !== undefined) setVisibility(panel, input.visibility);
         if (input.about !== undefined) {
           if (input.about) panel.about = input.about;
           else delete panel.about;
@@ -233,7 +273,7 @@ export function createPanelStore(options: PanelStoreOptions) {
     },
 
     /** Makes a card, or with a key a card of this panel already has, replaces that card's title, content and size. */
-    setCard(panelId: string, input: { key?: string; title: string; size?: PanelCardSize; content?: CardContent; botId: string }): PanelsResult<{ panel: Panel; card: PanelCard; created: boolean }> {
+    setCard(panelId: string, input: { key?: string; title: string; size?: PanelCardSize; content?: CardContent; botId: string; extra?: CardExtra }): PanelsResult<{ panel: Panel; card: PanelCard; created: boolean; previous?: PanelCard }> {
       return change((panels) => {
         const panel = findPanel(panels, panelId);
         if (!panel) return fail(404, `No panel ${panelId}. Call list_panels for the ids, or create_panel first.`);
@@ -245,18 +285,21 @@ export function createPanelStore(options: PanelStoreOptions) {
         const card: PanelCard = {
           id: existing?.id ?? newId("crd"), ...(input.key ? { key: input.key } : {}), title: input.title,
           size: input.size ?? existing?.size ?? "s", position: existing?.position ?? nextPosition(panel.cards),
-          ...(input.content ? { widget: input.content.widget, text: clip(input.content.text, PANEL_LIMITS.fallbackText) } : {}),
+          ...(input.content ? { widget: input.content.widget, text: clip(input.content.text, PANEL_LIMITS.fallbackText) } : existing?.widget ? { widget: existing.widget, ...(existing.text !== undefined ? { text: existing.text } : {}) } : {}),
           botId: input.botId, updatedAt: at, status: "ok",
         };
+        if (existing) for (const key of EXTRA_KEYS) if (existing[key] !== undefined) (card as unknown as Record<string, unknown>)[key] = existing[key];
+        if (input.content) delete card.building;
+        applyExtra(card, input.extra);
         if (tooBig(card)) return fail(400, TOO_BIG);
         if (existing) panel.cards[panel.cards.indexOf(existing)] = card;
         else panel.cards.push(card);
-        return { ok: true, panel, card, created: !existing, change: touched(panel, at) };
+        return { ok: true, panel, card, created: !existing, ...(existing ? { previous: existing } : {}), change: touched(panel, at) };
       });
     },
 
     /** Changes one card in place. A failure keeps the card's last content and says why; new content clears a failure. */
-    updateCard(panelId: string, ref: { cardId?: string; key?: string }, input: { title?: string; size?: PanelCardSize; content?: CardContent; failed?: string; botId: string }): PanelsResult<{ panel: Panel; card: PanelCard }> {
+    updateCard(panelId: string, ref: { cardId?: string; key?: string }, input: { title?: string; size?: PanelCardSize; content?: CardContent; failed?: string; botId: string; extra?: CardExtra }): PanelsResult<{ panel: Panel; card: PanelCard; previous: PanelCard }> {
       return change((panels) => {
         const panel = findPanel(panels, panelId);
         if (!panel) return fail(404, `No panel ${panelId}. Call list_panels for the ids.`);
@@ -272,21 +315,24 @@ export function createPanelStore(options: PanelStoreOptions) {
           next.status = "ok";
           delete next.failure;
           delete next.failedAt;
+          delete next.building;
         }
         if (input.failed !== undefined) {
           next.status = "failed";
           // The card shows this sentence to everyone who sees the panel: it loses its secrets as a widget's text does.
           next.failure = clip(redactSecretsInText(input.failed), PANEL_LIMITS.failure);
           next.failedAt = at;
+          delete next.building;
         }
+        applyExtra(next, input.extra);
         if (tooBig(next)) return fail(400, TOO_BIG);
         panel.cards[panel.cards.indexOf(card)] = next;
-        return { ok: true, panel, card: next, change: touched(panel, at) };
+        return { ok: true, panel, card: next, previous: card, change: touched(panel, at) };
       });
     },
 
     /** The person's rename or resize: the card's content, author and time stay as they were. */
-    patchCard(panelId: string, cardId: string, input: { title?: string; size?: PanelCardSize }): PanelsResult<{ panel: Panel; card: PanelCard }> {
+    patchCard(panelId: string, cardId: string, input: { title?: string; size?: PanelCardSize; botId?: string; extra?: CardExtra }): PanelsResult<{ panel: Panel; card: PanelCard }> {
       return change((panels) => {
         const panel = findPanel(panels, panelId);
         if (!panel) return fail(404, "No such panel.");
@@ -294,8 +340,71 @@ export function createPanelStore(options: PanelStoreOptions) {
         if (!card) return fail(404, "No such card.");
         if (input.title !== undefined) card.title = input.title;
         if (input.size !== undefined) card.size = input.size;
+        if (input.botId !== undefined) card.botId = input.botId;
+        applyExtra(card, input.extra);
         return { ok: true, panel, card, change: touched(panel, now()) };
       });
+    },
+
+    /** The person's new order: every card id of the panel once, drafts included or left out (they keep their place). */
+    order(panelId: string, cardIds: readonly string[]): PanelsResult<{ panel: Panel }> {
+      return change((panels) => {
+        const panel = findPanel(panels, panelId);
+        if (!panel) return fail(404, "No such panel.");
+        const shown = panel.cards.filter((card) => !card.draft);
+        const ids = new Set(cardIds);
+        if (ids.size !== cardIds.length) return fail(400, "cardIds: name each card once.");
+        if (cardIds.some((cardId) => !panel.cards.some((card) => card.id === cardId))) return fail(400, "cardIds: a card id is not on this panel. Read the panel again and send its card ids in the new order.");
+        if (shown.some((card) => !ids.has(card.id))) return fail(400, "cardIds: send every card of the panel, in the new order.");
+        const rest = panel.cards.filter((card) => !ids.has(card.id)).sort((a, b) => a.position - b.position);
+        const ordered = [...cardIds.map((cardId) => panel.cards.find((card) => card.id === cardId)!), ...rest];
+        ordered.forEach((card, position) => { card.position = position; });
+        panel.cards = ordered;
+        return { ok: true, panel, change: touched(panel, now()) };
+      });
+    },
+
+    /** Moves a card to another panel, last there; its key is kept unless that panel has it, then a free one is given. */
+    moveCard(fromId: string, cardId: string, toId: string, extra?: CardExtra): PanelsResult<{ panel: Panel; from: Panel; card: PanelCard }> {
+      const result = change((panels) => {
+        const from = findPanel(panels, fromId);
+        const to = findPanel(panels, toId);
+        if (!from || !to) return fail(404, "No such panel.");
+        const card = findCard(from, { cardId });
+        if (!card) return fail(404, "No such card.");
+        if (to.cards.length >= PANEL_LIMITS.cardsPerPanel) return fail(409, `That panel already has ${PANEL_LIMITS.cardsPerPanel} cards. Remove one first.`);
+        from.cards.splice(from.cards.indexOf(card), 1);
+        if (card.key && findCard(to, { key: card.key })) card.key = freeCardKey(to, card.key);
+        card.position = nextPosition(to.cards);
+        applyExtra(card, extra);
+        to.cards.push(card);
+        const at = now();
+        touched(from, at);
+        return { ok: true, panel: to, from, card, change: touched(to, at) };
+      });
+      if (result.ok) for (const listener of listeners) listener({ panelId: result.from.id, botId: result.from.createdBy.botId });
+      return result;
+    },
+
+    /** Drafts made before `before`, removed; each comes back with its panel's id. */
+    sweepDrafts(before: number): Array<{ panelId: string; card: PanelCard }> {
+      const stale = (card: PanelCard) => card.draft && Date.parse(card.draftAt ?? card.updatedAt) < before;
+      if (!load().panels.some((panel) => panel.cards.some(stale))) return [];
+      const gone: Array<{ panelId: string; card: PanelCard }> = [];
+      const touchedIds: Panel[] = [];
+      const result = change((panels) => {
+        for (const panel of panels) {
+          const old = panel.cards.filter(stale);
+          if (!old.length) continue;
+          panel.cards = panel.cards.filter((card) => !stale(card));
+          for (const card of old) gone.push({ panelId: panel.id, card });
+          touchedIds.push(panel);
+        }
+        const first = touchedIds[0]!;
+        return { ok: true, change: { panelId: first.id, botId: first.createdBy.botId } };
+      });
+      if (result.ok) for (const panel of touchedIds.slice(1)) for (const listener of listeners) listener({ panelId: panel.id, botId: panel.createdBy.botId });
+      return result.ok ? gone : [];
     },
 
     removeCard(panelId: string, cardId: string): PanelsResult<{ panel: Panel; card: PanelCard }> {

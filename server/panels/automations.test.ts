@@ -78,8 +78,8 @@ it("lists the automations that keep a panel, with their last run and whether it 
   const set = store.setCard(panel.id, { key: "revenue", title: "Revenue", botId: "scout" });
   if (!set.ok) throw new Error(set.error);
   expect(automations.list(auth, store.get(panel.id)!)).toEqual([
-    { routineId: "a", name: "Routine a", botId: "scout", enabled: true, nextRunAt: new Date(T0 + 86_400_000).toISOString(), lastRunAt: new Date(T0 + 600_000).toISOString(), lastRunThreadId: "th-2", running: true, lastRunUpdatedNothing: true },
-    { routineId: "b", name: "Routine b", botId: "scout", enabled: true, nextRunAt: new Date(T0 + 86_400_000).toISOString(), lastRunAt: new Date(T0 - 600_000).toISOString(), lastRunThreadId: "th-1", running: false, lastRunUpdatedNothing: false },
+    { routineId: "a", name: "Routine a", botId: "scout", enabled: true, nextRunAt: new Date(T0 + 86_400_000).toISOString(), lastRunAt: new Date(T0 + 600_000).toISOString(), lastRunThreadId: "th-2", running: true, lastRunUpdatedNothing: true, cadence: "custom" },
+    { routineId: "b", name: "Routine b", botId: "scout", enabled: true, nextRunAt: new Date(T0 + 86_400_000).toISOString(), lastRunAt: new Date(T0 - 600_000).toISOString(), lastRunThreadId: "th-1", running: false, lastRunUpdatedNothing: false, cardKey: "revenue", cadence: "custom" },
   ]);
 });
 

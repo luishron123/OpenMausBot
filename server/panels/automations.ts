@@ -6,13 +6,15 @@ import { z } from "zod";
 
 import { PANEL_KEY, type Panel, type PanelAutomation } from "../../shared/panels.ts";
 import type { RequestAuth } from "../request-auth.ts";
+import { scheduleText } from "../routine-requests.ts";
 import type { Routine, RoutineManager, RoutineRun } from "../routines.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { PanelStore } from "./store.ts";
-import { PANEL_TOOL_PATH, type PanelCaller } from "./tools.ts";
+import { cadenceOf } from "./cards.ts";
+import { PANEL_TOOL_PATH, privateHides, type PanelCaller } from "./tools.ts";
 import type { PanelTurnAccess } from "./turn-access.ts";
 
-export type PanelRoutines = Pick<RoutineManager, "listRoutines" | "listRuns" | "update" | "runNow">;
+export type PanelRoutines = Pick<RoutineManager, "listRoutines" | "listRuns" | "update" | "runNow" | "create" | "remove">;
 
 export const PANEL_LINK_PATH = `${PANEL_TOOL_PATH}/link`;
 
@@ -27,6 +29,8 @@ export interface PanelAutomationDeps {
   personStarted?(auth: RequestAuth, run: RoutineRun): void;
   /** Whether this turn may see the panel (tools.ts `sees`); a panel it may not see cannot be linked, as if it did not exist. */
   turnSees?: PanelTurnAccess;
+  /** The person's time zone, for each automation's schedule in words. */
+  timeZone?(): string;
 }
 
 const GOING = new Set(["queued", "running", "waiting"]);
@@ -40,6 +44,14 @@ const linkBody = z.object({
 
 export function createPanelAutomations(deps: PanelAutomationDeps) {
   const { store } = deps;
+  const described = (routine: Routine): { scheduleText?: string } => {
+    if (cadenceOf(routine) === "on-request") return {};
+    try {
+      return { scheduleText: scheduleText(routine.schedule as Parameters<typeof scheduleText>[0], deps.timeZone?.() ?? "UTC") };
+    } catch {
+      return {};
+    }
+  };
   const linked = (panel: Panel) => deps.routines()?.listRoutines().filter((routine) => routine.panelId === panel.id) ?? [];
 
   function list(auth: RequestAuth, panel: Panel): PanelAutomation[] {
@@ -61,6 +73,9 @@ export function createPanelAutomations(deps: PanelAutomationDeps) {
         ...(last?.threadId ? { lastRunThreadId: last.threadId } : {}),
         running: own.some((run) => GOING.has(run.status)),
         lastRunUpdatedNothing: last?.status === "completed" && started !== undefined && !cards.some((card) => Date.parse(card.updatedAt) >= started),
+        ...(routine.cardKey ? { cardKey: routine.cardKey } : {}),
+        cadence: cadenceOf(routine),
+        ...(described(routine)),
       };
     });
   }
@@ -106,7 +121,7 @@ export function createPanelAutomations(deps: PanelAutomationDeps) {
     const parsed = linkBody.safeParse(await readBody(req) ?? {});
     if (!parsed.success) return json(res, 400, { error: parsed.error.issues[0]?.message ?? "Send panel_id." });
     const sent = parsed.data;
-    const seen = (one: Panel | undefined) => (one && (deps.turnSees?.(caller, one) ?? true) ? one : undefined);
+    const seen = (one: Panel | undefined) => (one && !privateHides(one, caller.botId) && (deps.turnSees?.(caller, one) ?? true) ? one : undefined);
     const panel = sent.panel_id ? seen(store.get(sent.panel_id)) ?? seen(store.byKey(sent.panel_id)) ?? null : null;
     if (sent.panel_id && !panel) return json(res, 404, { error: `No panel ${sent.panel_id}. Call list_panels for the ids, or create_panel first.` });
     if (panel && !(deps.turnSees?.(caller, panel, "change") ?? true)) {
