@@ -85,6 +85,8 @@ describe("the Panels row", () => {
     act(() => root.render(createElement(SidebarFooterNav, { density: "comfortable", onToggleCollapsed: () => {} })));
     await settle();
     expect(dot()).not.toBeNull();
+    expect(dot()?.getAttribute("role")).toBe("img");
+    expect(dot()?.getAttribute("aria-label")).toBe("1 alert to see");
     alerts = [];
     act(() => { window.dispatchEvent(new CustomEvent("omb:panels-changed", { detail: { kind: "panels.changed", panelId: "p1" } })); });
     await settle();
