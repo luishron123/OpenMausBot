@@ -99,6 +99,15 @@ describe("widgetChartSpec", () => {
     expect(widgetChartSpec(node)!.height).toBe(200);
   });
 
+  it("writes each bar's value over it when asked, and never over a pile", async () => {
+    const shown = (await draw(chart({ series: [{ type: "bar", dataKey: "a", label: "Alpha" }], showValues: true }))).svg;
+    for (const row of data) expect(shown).toContain(`>${row.a}</text>`);
+    const plain = (await draw(chart({ series: [{ type: "bar", dataKey: "a", label: "Alpha" }] }))).svg;
+    expect(plain).not.toContain(">9</text>");
+    const piled = widgetChartSpec(chart({ series: [{ type: "bar", dataKey: "a", stack: "s" }, { type: "bar", dataKey: "b", stack: "s" }], showValues: true }))!;
+    expect((piled.layer as Array<{ mark: { type: string } }>).some((layer) => layer.mark.type === "text")).toBe(false);
+  });
+
   it("keeps two rows named alike as two bands, and two series labelled alike in their own colours", async () => {
     const node = chart({ data: [{ day: "Mon", a: 1, b: 2 }, { day: "Mon", a: 3, b: 4 }], series: [{ type: "bar", dataKey: "a", label: "Same" }, { type: "bar", dataKey: "b", label: "Same" }] });
     const { svg, bars } = await draw(node);

@@ -334,3 +334,19 @@ describe("New card", () => {
     expect(document.querySelector("[data-panel-pin-empty]")?.textContent).toBe("No blocks in your chats yet.");
   });
 });
+
+describe("the six kinds of card", () => {
+  it("draws a number, a goal, a line, bars, a checklist and a note from the widget blocks bots already write", async () => {
+    const { PANEL_SAMPLE_WIDGETS } = await import("./panel-samples");
+    panels[0]!.cards = Object.entries(PANEL_SAMPLE_WIDGETS).map(([format, sample], position) => card({ id: format, title: sample.title, size: sample.size, widget: sample.widget, format: format as PanelCard["format"], position }));
+    panels[0]!.automations = [];
+    await show();
+    expect(order()).toEqual(["kpi", "goal", "line", "bar", "checklist", "text"]);
+    const text = (id: string) => host.querySelector(`[data-panel-card="${id}"]`)!.textContent;
+    expect(text("kpi")).toContain("US$ 4,820");
+    expect(text("kpi")).toContain("+12%");
+    expect(host.querySelector('[data-panel-card="goal"] [role="progressbar"]')).not.toBeNull();
+    expect(text("checklist")).toContain("1 rejected");
+    expect(text("text")).toContain("2 low stock");
+  });
+});
