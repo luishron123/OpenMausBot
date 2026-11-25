@@ -1798,7 +1798,7 @@ function agentsIntegration(
 ) {
   const bot = store.bot(botId), speaking = botForThread(botId, threadId) ?? bot;
   // Only advertises the tools; the routes behind them refuse regardless.
-  const host = { skillAuthoring: skillAuthoringEnabled(cfg), skillBurger: skillBurgerEnabled(cfg), sharedComputers: botLending(), cloudHome: Boolean(CLOUD_HOME), team: Boolean(CLOUD_TEAM),
+  const host = { skillAuthoring: skillAuthoringEnabled(cfg), skillBurger: skillBurgerEnabled(cfg), panels: panelsEnabled(cfg), sharedComputers: botLending(), cloudHome: Boolean(CLOUD_HOME), team: Boolean(CLOUD_TEAM),
     voiceNotes: tts.voiceReady(cfg, speaking?.voice) && speaking?.voiceNotes !== false, x: Boolean(researchCredential(cfg.treg?.key)), research: researchAvailability.available(), imageGeneration: imageGenerationReady(cfg), meetings: boat.boatConfigured(cfg), appHosting: hostingCredential() !== null, localVm: localVmAvailability.available() };
   return { ...agentsProxyLaunch(), env: agentsServerEnv({ threadId, bot: bot ?? { id: botId }, room: Boolean(store.groupByThread(threadId)), teamComputer: Boolean(bot && inheritedTeamComputer(bot)), botDriven: automated || botDrivenConversation(store.taskByThread(botId, threadId)), host },
     { generation, depth, skillAuthoring, roomHandoffId, ...(hostFiles && !CLOUD_HOME && !HOSTED_WORKSPACE ? { deliversSavedFiles: true } : {}) },
@@ -13120,7 +13120,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         return json(res, 200, { rooms: rooms.slice(0, 50), unpostable: unpostable.slice(0, 50) });
       }
       const triggerContext = { from: internalSender, threadId: internalCapability.threadId, ownsThread: (botId: string, threadId: string) => Boolean(connectorThread(botId, threadId)), guestDriven: cloudGuestDriven(internalCapability.threadId), outsideDriven: () => outsideDrivenThread(internalCapability.threadId), canCommit: () => internalCapabilityIsActive(internalCapability), routineShown: (routine: Routine) => teamRoutines.inTurn(routine, internalCapability.threadId) };
-      if (await dispatchRoutes([appTriggers.internalRoutes(triggerContext), skillBurgerRuns.routesFor(internalCapability, req.headers.authorization)], { req, res, url, path, method, auth, json, readBody })) return;
+      if (await dispatchRoutes([appTriggers.internalRoutes(triggerContext), skillBurgerRuns.routesFor(internalCapability, req.headers.authorization), panels.toolRoutes(internalCapability)], { req, res, url, path, method, auth, json, readBody })) return;
       if (method === "POST" && path === "/api/internal/trigger-requests") {
         const from = internalSender;
         const fromThreadId = internalCapability.threadId;
