@@ -154,3 +154,24 @@ it("fills the automations on one panel and runs one now when asked", async () =>
   const watched = seed(store, "viewer");
   expect((await api(`/api/panels/${watched.panel.id}/refresh`, send("POST", {}))).status).toBe(403);
 });
+
+it("says a panel changed when a run of the automation that keeps it ends, though it changed no card", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "omb-panels-runs-"));
+  dirs.push(dataDir);
+  const frames: PanelsChangedFrame[] = [];
+  const routines = [{ id: "a", botId: "scout", target: "bot", panelId: "" }, { id: "b", botId: "scout", target: "bot" }];
+  const manager = { listRoutines: () => routines, listRuns: () => [], update: () => null, runNow: () => null };
+  const panels = createPanels({
+    dataDir, enabled: () => true, levelOf: () => "chat", broadcast: (frame) => frames.push(frame as unknown as PanelsChangedFrame),
+    routines: () => manager as unknown as NonNullable<ReturnType<NonNullable<Parameters<typeof createPanels>[0]["routines"]>>>,
+  });
+  const made = panels.store.create({ title: "Daily sales", createdBy: { botId: "scout" } });
+  if (!made.ok) throw new Error(made.error);
+  routines[0]!.panelId = made.panel.id;
+  frames.length = 0;
+  panels.runChanged({ id: "r1", routineId: "a", status: "running" } as never);
+  panels.runChanged({ id: "r2", routineId: "b", status: "completed" } as never);
+  expect(frames).toEqual([]);
+  panels.runChanged({ id: "r1", routineId: "a", status: "completed" } as never);
+  expect(frames).toEqual([{ kind: "panels.changed", panelId: made.panel.id, botId: "scout" }]);
+});

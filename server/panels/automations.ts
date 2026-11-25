@@ -24,6 +24,8 @@ export interface PanelAutomationDeps {
   sees(auth: RequestAuth, botId: string): boolean;
   /** Told about a run this person started, as the person's own run-now route is. */
   personStarted?(auth: RequestAuth, run: RoutineRun): void;
+  /** Whether this turn may see the panel (tools.ts `sees`); a panel it may not see cannot be linked, as if it did not exist. */
+  turnSees?(caller: PanelCaller, panel: Panel): boolean;
 }
 
 const GOING = new Set(["queued", "running", "waiting"]);
@@ -76,6 +78,15 @@ export function createPanelAutomations(deps: PanelAutomationDeps) {
     return started ? { ok: true } : { ok: false, status: 409, error: "The automation could not start now. Try again shortly." };
   }
 
+  /** The panel a linked routine's run kept, once that run has ended, so the person's screen reads the automation again
+   * (its `running` is over) even when the run changed no card; null for any other run. */
+  function runEnded(run: RoutineRun): { panelId: string; botId: string } | null {
+    if (GOING.has(run.status) || !deps.enabled()) return null;
+    const routine = deps.routines()?.listRoutines().find((one) => one.id === run.routineId);
+    const panel = routine?.panelId ? store.get(routine.panelId) : undefined;
+    return panel ? { panelId: panel.id, botId: panel.createdBy.botId } : null;
+  }
+
   /** The line a linked routine's run reads with its instructions; null for any other routine. */
   function runNote(routine: Routine | undefined): string | null {
     if (!routine?.panelId || !deps.enabled()) return null;
@@ -94,7 +105,8 @@ export function createPanelAutomations(deps: PanelAutomationDeps) {
     const parsed = linkBody.safeParse(await readBody(req) ?? {});
     if (!parsed.success) return json(res, 400, { error: parsed.error.issues[0]?.message ?? "Send panel_id." });
     const sent = parsed.data;
-    const panel = sent.panel_id ? store.get(sent.panel_id) ?? store.byKey(sent.panel_id) : null;
+    const seen = (one: Panel | undefined) => (one && (deps.turnSees?.(caller, one) ?? true) ? one : undefined);
+    const panel = sent.panel_id ? seen(store.get(sent.panel_id)) ?? seen(store.byKey(sent.panel_id)) ?? null : null;
     if (sent.panel_id && !panel) return json(res, 404, { error: `No panel ${sent.panel_id}. Call list_panels for the ids, or create_panel first.` });
     if (!panel && sent.card_key) return json(res, 400, { error: "card_key needs panel_id." });
     if (!sent.routine_id) return json(res, 200, { text: `Panel ${panel?.id ?? "(none)"} can be linked.` });
@@ -115,5 +127,5 @@ export function createPanelAutomations(deps: PanelAutomationDeps) {
     });
   };
 
-  return { list, refresh, runNote, linkRoute };
+  return { list, refresh, runNote, runEnded, linkRoute };
 }
