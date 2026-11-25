@@ -71,6 +71,31 @@ describe("the Panels row", () => {
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "showPanels" });
   });
 
+  it("puts a dot on the Panels row while a card holds an alert nobody has seen", async () => {
+    const { act } = await import("react");
+    const { createRoot } = await import("react-dom/client");
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    let alerts = [{ panelId: "p1", panelTitle: "Store", cardId: "c1", cardTitle: "Orders", text: "Only 22", at: new Date().toISOString() }];
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ alerts }), { headers: { "content-type": "application/json" } }))));
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const settle = async () => { for (let round = 0; round < 6; round += 1) await act(async () => { await Promise.resolve(); }); };
+    const dot = () => host.querySelector('[data-sidebar-nav="panels"] [data-testid="routines-attention"]');
+    act(() => root.render(createElement(SidebarFooterNav, { density: "comfortable", onToggleCollapsed: () => {} })));
+    await settle();
+    expect(dot()).not.toBeNull();
+    expect(dot()?.getAttribute("role")).toBe("img");
+    expect(dot()?.getAttribute("aria-label")).toBe("1 alert to see");
+    alerts = [];
+    act(() => { window.dispatchEvent(new CustomEvent("omb:panels-changed", { detail: { kind: "panels.changed", panelId: "p1" } })); });
+    await settle();
+    expect(dot()).toBeNull();
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+
   it("leaves every menu while the switch is off", () => {
     fixture.config = { features: { panels: false } };
     expect(sidebarPlaces()).not.toContain("panels");

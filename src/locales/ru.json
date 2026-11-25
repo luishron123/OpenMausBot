@@ -7393,5 +7393,8 @@
   "skillBurger.pill.running": "Выполняется… {count}",
   "skillBurger.pill.stopped": "Остановлено",
   "skillBurger.pill.addPath": "Добавить путь",
-  "skillBurger.card.madeBy": "Создано: {name}"
+  "skillBurger.card.madeBy": "Создано: {name}",
+  "panels.failure.paused": "Приостановлено после 5 сбоев подряд",
+  "panels.failure.noUpdate": "Последнее обновление не принесло новых данных",
+  "panels.failure.engine": "Бот этой карточки использует движок, который пока не поддерживает автоматическое обновление"
 }

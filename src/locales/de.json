@@ -4373,5 +4373,8 @@
   "skillBurger.pill.running": "Läuft… {count}",
   "skillBurger.pill.stopped": "Angehalten",
   "skillBurger.pill.addPath": "Weg hinzufügen",
-  "skillBurger.card.madeBy": "Erstellt von {name}"
+  "skillBurger.card.madeBy": "Erstellt von {name}",
+  "panels.failure.paused": "Nach 5 Fehlschlägen in Folge pausiert",
+  "panels.failure.noUpdate": "Die letzte Aktualisierung brachte keine neuen Daten",
+  "panels.failure.engine": "Der Bot dieser Karte nutzt eine KI, die automatische Aktualisierung noch nicht unterstützt"
 }

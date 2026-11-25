@@ -65,7 +65,7 @@ export function widgetChartSpec(node: WidgetNode, width = WIDGET_CHART_WIDTH): R
     const value = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
     const group = item.stack ? `stack:${item.stack}` : `series:${index}`;
     if (item.type === "bar" && !groups.includes(group)) groups.push(group);
-    return { row: at, series: index, group, mark: item.type, value, tip: value === null ? null : `${rowLabels[at]} · ${item.label}: ${compact.format(value)}` };
+    return { row: at, series: index, group, mark: item.type, value, label: value === null ? null : compact.format(value), tip: value === null ? null : `${rowLabels[at]} · ${item.label}: ${compact.format(value)}` };
   }));
   const highest = Math.max(0, ...values.map((datum) => Math.abs(datum.value ?? 0)));
   const showGrid = node.showGrid !== false;
@@ -84,6 +84,16 @@ export function widgetChartSpec(node: WidgetNode, width = WIDGET_CHART_WIDTH): R
         y: y("zero"),
         // the first series at the foot of its pile, as it is listed
         order: { field: "series", type: "quantitative" },
+        ...(groups.length > 1 ? { xOffset: { field: "group", type: "nominal", scale: { domain: groups, paddingInner: 0.08 } } } : {}),
+      },
+    },
+    // each bar's value over it, which a pile has no room for
+    has("bar") && node.showValues === true && !stacked && {
+      transform: [{ filter: "datum.mark === 'bar' && datum.value !== null" }],
+      mark: { type: "text", baseline: "bottom", dy: -3, fontSize: 11 },
+      encoding: {
+        y: y("zero"),
+        text: { field: "label", type: "nominal" },
         ...(groups.length > 1 ? { xOffset: { field: "group", type: "nominal", scale: { domain: groups, paddingInner: 0.08 } } } : {}),
       },
     },

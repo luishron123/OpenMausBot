@@ -149,6 +149,18 @@ describe("the list", () => {
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "showPanels", panelId: "p1" });
   });
 
+  it("draws each panel's layout in miniature and a dot while a card holds an alert", async () => {
+    Object.assign(panels[0]!.cards[0]!, { format: "kpi", alertActive: { text: "Only 22 orders", at: ago(5) } });
+    await show();
+    const rows = [...host.querySelectorAll("[data-panel-row]")];
+    const blocks = [...rows[0]!.querySelectorAll("[data-panel-thumb-block]")].map((block) => block.getAttribute("data-panel-thumb-block"));
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toBe("kpi");
+    expect(rows[0]!.querySelector("[data-panel-alerts]")?.textContent).toBe("1 alert to see");
+    expect(rows[1]!.querySelector("[data-panel-thumb-block]")).toBeNull();
+    expect(rows[1]!.querySelector("[data-panel-alerts]")).toBeNull();
+  });
+
   it("says what goes here when there are none, with one way to start", async () => {
     panels = [];
     await show();
@@ -267,7 +279,7 @@ describe("one panel", () => {
     expect([cardState("c1"), cardState("c2"), cardState("c3")]).toEqual(["ok", "failed", "waiting"]);
     const ok = host.querySelector('[data-panel-card="c1"]')!;
     expect(ok.textContent).toContain("42 orders");
-    expect(ok.querySelector("footer")?.textContent).toBe("12 min ago·Scout");
+    expect(ok.querySelector("footer")?.textContent).toBe("Scout·12 min ago");
     const failed = host.querySelector('[data-panel-card="c2"]')!;
     expect(failed.textContent).toContain("The store didn't answer.");
     expect(failed.textContent).toContain("42 orders");

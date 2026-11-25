@@ -1,23 +1,23 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { CircleAlert, LayoutDashboard, MessageSquare, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Check, CircleAlert, LayoutGrid, MessageSquare, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2 } from "lucide-react";
 
 import { nextWhen } from "@/lib/automations";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
-import {
-  panelUpdating, refreshPanel, removeCard, renamePanel, resizeCard, restoreCard, usePanel,
-  type Panel, type PanelAutomation, type PanelCard as Card, type PanelCardSize,
-} from "@/lib/panels";
+import { panelWide, refreshPanel, renamePanel, usePanel, type Panel, type PanelAutomation } from "@/lib/panels";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openBot, openThread } from "@/state/thread-navigation";
 import { sameFields, useStoreDispatch, useStoreSelector } from "@/state/store-select";
 import { SidebarPopoverMenu } from "../SidebarPopoverMenu";
+import { BotAvatar } from "../Avatar";
 import { TOOL_PAGE_TITLE, ToolPage, ToolPageActions, ToolPageHeader } from "../ToolPageShell";
-import { PanelCard } from "./PanelCard";
+import { NewCardDialog } from "./NewCardDialog";
+import { CardSidePanel } from "./CardSidePanel";
+import { CardGrid, placedCards, useCardRemoval } from "./PanelGrid";
+import { ShareDialog, VisibilityChip, panelVisibility } from "./ShareDialog";
 
-/** Grows into two columns, then four, by the page's own width (not the window's), so an open side panel counts. */
-export const PANEL_GRID = "grid auto-rows-[minmax(10rem,auto)] grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-4";
+export { PANEL_GRID } from "./PanelGrid";
 
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error && cause.message ? cause.message : fallback);
 
@@ -96,68 +96,6 @@ function AutomationLine({ panelId, automation, onPoll }: { panelId: string; auto
   );
 }
 
-function CardGrid({ panel, botName, onAsk }: { panel: Panel; botName: (botId: string) => string | undefined; onAsk?: () => void }) {
-  const [removed, setRemoved] = useState<Card | null>(null);
-  const [problem, setProblem] = useState("");
-  const updating = panelUpdating(panel);
-  const cards = [...panel.cards].sort((a, b) => a.position - b.position);
-  const resize = async (card: Card, size: PanelCardSize) => {
-    setProblem("");
-    try { await resizeCard(panel.id, card.id, size); } catch (cause) { setProblem(errorText(cause, t("panels.card.changeFailed"))); }
-  };
-  const remove = async (card: Card) => {
-    setProblem("");
-    try {
-      const result = await removeCard(panel.id, card.id);
-      setRemoved(result.card);
-    } catch (cause) {
-      setProblem(errorText(cause, t("panels.card.changeFailed")));
-    }
-  };
-  const undo = async () => {
-    if (!removed) return;
-    try {
-      await restoreCard(panel.id, removed);
-      setRemoved(null);
-    } catch (cause) {
-      setProblem(errorText(cause, t("panels.undoFailed")));
-    }
-  };
-  return (
-    <>
-      {removed && (
-        <div role="status" className="mb-3 flex items-center gap-2 rounded-xl bg-card px-3.5 py-2.5 text-[13px] text-ink-secondary">
-          <span dir="auto" className="min-w-0 flex-1 truncate">{t("panels.card.removed", { name: removed.title })}</span>
-          <button type="button" onClick={() => void undo()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent-text hover:bg-ink/[0.06]">{t("common.undo")}</button>
-        </div>
-      )}
-      {problem && <p role="alert" className="mb-3 text-[13px] text-danger">{problem}</p>}
-      {cards.length === 0 ? (
-        <section data-panel-empty className="flex flex-col items-center px-6 py-16 text-center">
-          <LayoutDashboard aria-hidden="true" size={28} className="text-ink-tertiary" />
-          <p className="mx-auto mt-3 max-w-sm text-[14px] leading-relaxed text-ink-secondary">{t("panels.panel.empty")}</p>
-          {onAsk && <button type="button" className="ui-button mt-4" onClick={onAsk}>{t("panels.menu.openConversation")}</button>}
-        </section>
-      ) : (
-        <div className="@container">
-          <div className={PANEL_GRID}>
-            {cards.map((card) => (
-              <PanelCard
-                key={card.id}
-                card={card}
-                updating={updating}
-                botName={botName(card.botId)}
-                onResize={(size) => void resize(card, size)}
-                onRemove={() => void remove(card)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
 /** One panel: its cards, who keeps them up to date and when they change next. */
 export function PanelView({ panelId, onBack, onDelete }: { panelId: string; onBack: () => void; onDelete: (panel: Panel) => void }) {
   const dispatch = useStoreDispatch();
@@ -166,14 +104,27 @@ export function PanelView({ panelId, onBack, onDelete }: { panelId: string; onBa
   const { panel, error, missing, refresh } = usePanel(panelId);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [problem, setProblem] = useState("");
+  const [organizing, setOrganizing] = useState(false);
+  const [dialog, setDialog] = useState<"new" | "share" | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const removal = useCardRemoval(panelId);
   const back = useRef<HTMLButtonElement>(null);
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => { back.current?.focus({ preventScroll: true }); }, [panelId]);
   useEffect(() => { if (renaming !== null) field.current?.select(); }, [renaming !== null]);
   useEffect(() => { if (missing) onBack(); }, [missing, onBack]);
 
-  const botName = (botId: string) => routing.bots.find((bot) => bot.id === botId)?.name;
   const maker = panel ? routing.bots.find((bot) => bot.id === panel.createdBy.botId) : undefined;
+  // Each card's own automation shows in its footer and side panel; the header keeps the ones for the whole panel.
+  const wide = panel ? (panel.automations ?? []).filter((automation) => panelWide(panel, automation)) : [];
+  const opened = panel && openId ? placedCards(panel).find((card) => card.id === openId) : undefined;
+  useEffect(() => { if (openId && panel && !opened) setOpenId(null); }, [openId, panel, opened]);
+  useEffect(() => { if (organizing) setOpenId(null); }, [organizing]);
+  const closeSide = () => {
+    const id = openId;
+    setOpenId(null);
+    if (id) requestAnimationFrame(() => [...document.querySelectorAll<HTMLElement>("[data-panel-card]")].find((element) => element.getAttribute("data-panel-card") === id)?.querySelector<HTMLElement>("[data-panel-card-open]")?.focus());
+  };
   const title = panel?.title ?? "";
 
   const rename = async () => {
@@ -214,6 +165,26 @@ export function PanelView({ panelId, onBack, onDelete }: { panelId: string; onBa
         )}
         {panel && (
           <ToolPageActions>
+            <button type="button" data-panel-action="share" onClick={() => setDialog("share")} className="ui-button ui-button-md inline-flex items-center gap-1.5">
+              <Share2 size={14} aria-hidden="true" />
+              <span className="max-sm:sr-only">{t("panels.share.open")}</span>
+            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                data-panel-action="organize"
+                aria-pressed={organizing}
+                onClick={() => setOrganizing(!organizing)}
+                className={cn("ui-button ui-button-md inline-flex items-center gap-1.5", organizing && "ui-button-primary")}
+              >
+                {organizing ? <Check size={14} aria-hidden="true" /> : <LayoutGrid size={14} aria-hidden="true" />}
+                <span className={cn(!organizing && "max-sm:sr-only")}>{organizing ? t("panels.organize.done") : t("panels.organize.open")}</span>
+              </button>
+              <button type="button" data-panel-action="new" onClick={() => setDialog("new")} className="ui-button ui-button-md inline-flex items-center gap-1.5">
+                <Plus size={14} aria-hidden="true" />
+                {t("panels.new.open")}
+              </button>
+            </div>
             <SidebarPopoverMenu
               ariaLabel={t("panels.menu.aria", { name: title })}
               triggerLabel={t("panels.menu.aria", { name: title })}
@@ -234,33 +205,63 @@ export function PanelView({ panelId, onBack, onDelete }: { panelId: string; onBa
           </ToolPageActions>
         )}
       </ToolPageHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto" data-panel-view={panel ? panel.id : "loading"}>
-        <div className="mx-auto w-full max-w-6xl p-4 sm:p-6">
-          {error && !panel ? (
-            <section role="alert" className="px-6 py-16 text-center">
-              <p className="text-[14px] text-ink-secondary">{t("panels.panel.loadFailed")}</p>
-              <button type="button" className="ui-button mt-4" onClick={refresh}>{t("common.tryAgain")}</button>
-            </section>
-          ) : panel ? (
-            <>
-              <div className="mb-5 flex flex-col gap-2">
-                {panel.about && <p dir="auto" className="max-w-2xl text-[14px] leading-relaxed text-ink-secondary">{panel.about}</p>}
-                <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-4 text-ink-tertiary">
-                  {maker && <bdi dir="auto">{t("panels.madeBy", { name: maker.name })}</bdi>}
-                  {maker && <span aria-hidden="true">·</span>}
-                  <span>{t("panels.updated", { when: relativeTime(Date.parse(panel.updatedAt)) })}</span>
-                </p>
-                {(panel.automations ?? []).length > 0 && (
-                  <ul aria-label={t("panels.automation.list")} className="mt-1 flex flex-col gap-2">
-                    {(panel.automations ?? []).map((automation) => <AutomationLine key={automation.routineId} panelId={panel.id} automation={automation} onPoll={refresh} />)}
-                  </ul>
-                )}
-                {problem && <p role="alert" className="text-[13px] text-danger">{problem}</p>}
-              </div>
-              <CardGrid panel={panel} botName={botName} onAsk={maker ? openConversation : undefined} />
-            </>
-          ) : null}
+      <div className="relative flex min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto" data-panel-view={panel ? panel.id : "loading"}>
+          <div className="mx-auto w-full max-w-6xl p-4 sm:p-6">
+            {error && !panel ? (
+              <section role="alert" className="px-6 py-16 text-center">
+                <p className="text-[14px] text-ink-secondary">{t("panels.panel.loadFailed")}</p>
+                <button type="button" className="ui-button mt-4" onClick={refresh}>{t("common.tryAgain")}</button>
+              </section>
+            ) : panel ? (
+              <>
+                <div className="mb-5 flex flex-col gap-2">
+                  {panel.about && <p dir="auto" className="max-w-2xl text-[14px] leading-relaxed text-ink-secondary">{panel.about}</p>}
+                  <p data-panel-meta className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-4 text-ink-tertiary">
+                    <VisibilityChip visibility={panelVisibility(panel)} />
+                    {maker && (
+                      <span className="ms-1 inline-flex min-w-0 items-center gap-1.5">
+                        <BotAvatar bot={maker} size={16} />
+                        <bdi dir="auto" className="truncate">{t("panels.madeBy", { name: maker.name })}</bdi>
+                      </span>
+                    )}
+                    {maker && <span aria-hidden="true">·</span>}
+                    <span>{placedCards(panel).length === 1 ? t("panels.list.cardsOne") : t("panels.list.cardsMany", { count: placedCards(panel).length })}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{t("panels.updated", { when: relativeTime(Date.parse(panel.updatedAt)) })}</span>
+                  </p>
+                  {wide.length > 0 && (
+                    <ul aria-label={t("panels.automation.list")} className="mt-1 flex flex-col gap-2">
+                      {wide.map((automation) => <AutomationLine key={automation.routineId} panelId={panel.id} automation={automation} onPoll={refresh} />)}
+                    </ul>
+                  )}
+                  {problem && <p role="alert" className="text-[13px] text-danger">{problem}</p>}
+                </div>
+                {organizing && <p className="mb-3 text-[13px] leading-[18px] text-ink-secondary">{t("panels.organize.hint")}</p>}
+                <CardGrid
+                  panel={panel}
+                  bots={routing.bots}
+                  organizing={organizing}
+                  removal={removal}
+                  openId={opened?.id}
+                  onAsk={maker ? openConversation : undefined}
+                  onOpen={(card) => setOpenId(card.id === openId ? null : card.id)}
+                />
+                {dialog === "new" && <NewCardDialog panel={panel} bots={routing.bots} onClose={() => setDialog(null)} />}
+                {dialog === "share" && <ShareDialog panel={panel} makerName={maker?.name} onClose={() => setDialog(null)} />}
+              </>
+            ) : null}
+          </div>
         </div>
+        {panel && opened && (
+          <CardSidePanel
+            panel={panel}
+            card={opened}
+            bots={routing.bots}
+            onClose={closeSide}
+            onRemove={(card) => { setOpenId(null); void removal.remove(card); }}
+          />
+        )}
       </div>
     </ToolPage>
   );

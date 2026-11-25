@@ -3900,5 +3900,8 @@
   "skillBurger.pill.running": "चल रहा है… {count}",
   "skillBurger.pill.stopped": "रुका",
   "skillBurger.pill.addPath": "रास्ता जोड़ें",
-  "skillBurger.card.madeBy": "{name} ने बनाया"
+  "skillBurger.card.madeBy": "{name} ने बनाया",
+  "panels.failure.paused": "लगातार 5 बार विफल होने के बाद रोका गया",
+  "panels.failure.noUpdate": "पिछले अपडेट में कोई नया डेटा नहीं आया",
+  "panels.failure.engine": "इस कार्ड का बॉट ऐसा इंजन इस्तेमाल करता है जो अभी अपने-आप अपडेट का समर्थन नहीं करता"
 }

@@ -6138,5 +6138,8 @@
   "skillBurger.pill.running": "Đang chạy… {count}",
   "skillBurger.pill.stopped": "Đã dừng",
   "skillBurger.pill.addPath": "Thêm nhánh",
-  "skillBurger.card.madeBy": "Do {name} tạo"
+  "skillBurger.card.madeBy": "Do {name} tạo",
+  "panels.failure.paused": "Đã tạm dừng sau 5 lần lỗi liên tiếp",
+  "panels.failure.noUpdate": "Lần cập nhật gần nhất không có dữ liệu mới",
+  "panels.failure.engine": "Bot của thẻ này dùng một công cụ AI chưa hỗ trợ cập nhật tự động"
 }

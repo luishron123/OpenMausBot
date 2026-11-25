@@ -7339,5 +7339,8 @@
   "skillBurger.pill.running": "Trwa… {count}",
   "skillBurger.pill.stopped": "Zatrzymano",
   "skillBurger.pill.addPath": "Dodaj ścieżkę",
-  "skillBurger.card.madeBy": "Utworzone przez {name}"
+  "skillBurger.card.madeBy": "Utworzone przez {name}",
+  "panels.failure.paused": "Wstrzymano po 5 nieudanych próbach z rzędu",
+  "panels.failure.noUpdate": "Ostatnia aktualizacja nie przyniosła nowych danych",
+  "panels.failure.engine": "Bot tej karty używa silnika, który nie obsługuje jeszcze automatycznej aktualizacji"
 }

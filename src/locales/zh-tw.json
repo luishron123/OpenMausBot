@@ -10455,5 +10455,8 @@
   "skillBurger.pill.running": "執行中… {count}",
   "skillBurger.pill.stopped": "已停止",
   "skillBurger.pill.addPath": "加入路徑",
-  "skillBurger.card.madeBy": "由 {name} 建立"
+  "skillBurger.card.madeBy": "由 {name} 建立",
+  "panels.failure.paused": "連續失敗 5 次後已暫停",
+  "panels.failure.noUpdate": "上次更新沒有帶來新資料",
+  "panels.failure.engine": "此卡片的機器人使用的引擎尚不支援自動更新"
 }

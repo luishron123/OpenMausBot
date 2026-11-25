@@ -6138,5 +6138,8 @@
   "skillBurger.pill.running": "Çalışıyor… {count}",
   "skillBurger.pill.stopped": "Durdu",
   "skillBurger.pill.addPath": "Yol ekle",
-  "skillBurger.card.madeBy": "{name} tarafından yapıldı"
+  "skillBurger.card.madeBy": "{name} tarafından yapıldı",
+  "panels.failure.paused": "Art arda 5 hatadan sonra duraklatıldı",
+  "panels.failure.noUpdate": "Son güncelleme yeni veri getirmedi",
+  "panels.failure.engine": "Bu kartın botu, otomatik güncellemeyi henüz desteklemeyen bir motor kullanıyor"
 }
