@@ -34,7 +34,7 @@ function PanelRow({ panel, onOpen }: { panel: PanelSummary; onOpen: () => void }
             )}
           </span>
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-tertiary">
-            {bot && <><bdi dir="auto" className="min-w-0 truncate">{bot.name}</bdi><span aria-hidden="true">·</span></>}
+            {bot && <span className="min-w-0 truncate"><bdi dir="auto">{bot.name}</bdi><span aria-hidden="true" className="ms-1.5">·</span></span>}
             <span className="shrink-0">{panel.cardCount === 1 ? t("panels.list.cardsOne") : t("panels.list.cardsMany", { count: panel.cardCount })}</span>
             {Number.isFinite(updated) && <><span aria-hidden="true">·</span><span className="shrink-0">{t("panels.updated", { when: relativeTime(updated) })}</span></>}
           </span>
