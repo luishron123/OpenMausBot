@@ -208,8 +208,7 @@ export interface AcpSupport extends AcpDriverHooks {
   ownMcpOverHttp?: boolean | "advertised";
   /** How many tools the agent lists of its own beside the MCP servers', counted against a provider's tool limit. */
   engineTools?: number;
-  /** How many characters of MCP tool JSON the agent keeps before it drops the largest tools: each server lists its share. */
-  mcpToolChars?: number;
+  /** How many characters of MCP tool JSON the agent keeps before it drops the largest tools: each server lists its share. */ mcpToolChars?: number;
   /** The agent's own debug log, read while a prompt is quiet: a new line proves it alive and `parse`
    * picks what to tell the person. Null when this process keeps none. A `shared` log holds every session's
    * and process's lines, so its lines prove nothing about this turn and only `parse` reads them. */
@@ -591,9 +590,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               message: `${support.displayName} offered no "${want}" permission option — cancelling the request instead of guessing`,
             });
 
-          const toolCall = params.toolCall ?? {};
-          const isQuestion = String(toolCall.toolCallId ?? "").startsWith("interaction_");
-          const bridgeCall = !isQuestion && acpBridgeCallRequest(toolCall);
+          const toolCall = params.toolCall ?? {}, isQuestion = String(toolCall.toolCallId ?? "").startsWith("interaction_"), bridgeCall = !isQuestion && acpBridgeCallRequest(toolCall);
           if ((support.allowsAlone?.(instanceId, current.turn, toolCall) || (current.turnConfig.fullAuto && current.turn.approvalMode === undefined)) && !isQuestion && acpAnswersAlone(toolCall.rawInput)) {
             const allow = optionFor("allow");
             if (!allow) missing("allow");
