@@ -551,12 +551,12 @@ describe.skipIf(WINDOWS)("a native CLI set as the engine's own path", () => {
     });
     const recorder = recordEvents(instance.adapter);
     let resumeCursor: string | undefined;
-    const send = async (text: string, stable: string, volatile: string) => {
+    const send = async (text: string, stable: string, volatile: string, recoveryText?: string) => {
       const { turnId } = await instance.adapter.sendTurn({
-        threadId: name, text, cwd: fake.directory, system: stable + volatile, systemStable: stable, systemVolatile: volatile, resumeCursor,
+        threadId: name, text, cwd: fake.directory, system: stable + volatile, systemStable: stable, systemVolatile: volatile, resumeCursor, recoveryText,
       });
       expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId)).toMatchObject({ ok: true });
-      resumeCursor ??= (recorder.events.find((event) => event.type === "session.started") as { sessionId: string }).sessionId;
+      resumeCursor = (recorder.events.findLast((event) => event.type === "session.started" && event.turnId === turnId) as { sessionId: string } | undefined)?.sessionId ?? resumeCursor;
       return JSON.parse(readFileSync(`${fake.dump}.prompt.json`, "utf8")) as Array<{ type: string; text: string }>;
     };
     const setups = () => readFileSync(rpc, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { method: string; cwd: string; sessionId?: string; meta?: unknown })
@@ -575,14 +575,18 @@ describe.skipIf(WINDOWS)("a native CLI set as the engine's own path", () => {
     expect(await thread.send("again", RULES, MEMORY)).toEqual([{ type: "text", text: "again" }]);
     expect(thread.setups()).toHaveLength(1);
 
+    // The CLI keeps the prompt a session was created with and adds a resume's after it: a revised prompt opens a new
+    // session from the conversation so far, so the model is not shown both.
+    const first = thread.sessionId();
     const revised = RULES + " Reply in French.";
-    expect(await thread.send("third", revised, MEMORY)).toEqual([
-      { type: "text", text: "third" },
-      { type: "text", text: expect.stringContaining(MEMORY.trim()) },
-    ]);
-    expect(thread.setups().at(-1)).toEqual(expect.objectContaining({
-      method: "session/resume", sessionId: thread.sessionId(), meta: { antigravity: { systemPrompt: { append: revised } } },
-    }));
+    const [third] = await thread.send("third", revised, MEMORY, "user: /learn what we did\nuser: again\nuser: third");
+    expect(third!.text).toContain("user: again\nuser: third");
+    expect(thread.setups().map((call) => call.method)).toEqual(["session/new", "session/new"]);
+    expect(thread.setups().at(-1)).toEqual(expect.objectContaining({ meta: { antigravity: { systemPrompt: { append: revised } } } }));
+    expect(thread.sessionId()).not.toBe(first);
+
+    expect(await thread.send("fourth", revised, MEMORY)).toEqual([{ type: "text", text: "fourth" }]);
+    expect(thread.setups()).toHaveLength(2);
   }, 90_000);
 
   it("keeps the system prompt in the text for a CLI that does not say it takes one", async () => {

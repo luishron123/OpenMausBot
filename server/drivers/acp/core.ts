@@ -19,7 +19,7 @@ import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, deviceAuthInstanceSurface, type DeviceSignIn } from "../device-auth.ts";
 import { AcpBrowserAuth, acpBrowserAuthInstanceSurface, type AcpBrowserSignInSpec } from "./browser-auth.ts";
 import { commitPromptSplitReceipt, deletePromptSplitReceipt, type PendingPromptSplitReceipt } from "../prompt-split.ts";
-import { liveSessionKey, sessionSystem, turnPrompt } from "./session-system.ts";
+import { heldSystemChanged, liveSessionKey, sessionSystem, turnPrompt } from "./session-system.ts";
 import { boxAudienceKey, describeSpawnFailure, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts"; import { execCliProbe } from "../../cli-probe-cache.ts"; import { stopEngineTree, stopEngineTrees } from "../../engine-stop.ts";
 import { applyOneShotEnv, oneShotTurnModel, runAcpOneShot } from "./background-text.ts"; import type { AcpBackgroundWork } from "./background-work.ts";
 import { acpCapabilities } from "./capabilities.ts"; import { ACP_MEDIA_MAX_BYTES, readAcpMediaLinks } from "./media-links.ts";
@@ -1129,8 +1129,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               }
               const selectionParams = narrowsNativeTools(turn.toolScope)
                 ? support.toolScopeSessionParams!(turn, init, mcpServers.length > 0, { config: turnConfig, env, cwd }) : {};
-              let loaded = false;
-              if (cursor && !brokenSessions.has(cursor) && (!support.closeBeforeLiveLoad || liveSessionId !== cursor || await request("session/close", { sessionId: cursor }, 30_000).then(() => { session.sessionId = session.sessionKey = null; return true; }, () => false))) {
+              let loaded = false; const otherSystem = cursor !== null && heldSystemChanged(DRIVER_KIND, threadId, cursor, turn, heldSystem());
+              if (cursor && !otherSystem && !brokenSessions.has(cursor) && (!support.closeBeforeLiveLoad || liveSessionId !== cursor || await request("session/close", { sessionId: cursor }, 30_000).then(() => { session.sessionId = session.sessionKey = null; return true; }, () => false))) {
                 try {
                   await loadUntilReplayQuiet({
                     link: session.acp, sessionId: cursor, quietMs: support.loadReplayQuietMs?.(turn), replayed: () => session.sessionConfigResult ?? {},
@@ -1158,7 +1158,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 }
               }
               if (loaded) break;
-              if (cursor && liveSessionId === cursor) {
+              if (cursor && liveSessionId === cursor && !otherSystem) {
                 session.current = null;
                 closeSession(threadId, "reestablish");
                 session = launchSession();

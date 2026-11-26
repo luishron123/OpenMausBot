@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SendTurnInput } from "../../contracts.ts";
-import { promptHalves, readPromptSplitReceipt, splitSessionNote, splitSessionPrompt, type PromptSplitReceipt } from "../prompt-split.ts";
+import { promptHalves, promptSplitFingerprints, readPromptSplitReceipt, splitSessionNote, splitSessionPrompt, type PromptSplitReceipt } from "../prompt-split.ts";
 import type { AcpDriverHooks } from "./driver-hooks.ts";
 
 type SystemHooks = Pick<AcpDriverHooks, "sessionSystemPrompt">;
@@ -14,6 +14,16 @@ export function sessionSystem(support: SystemHooks, init: unknown, instanceId: s
 /** What a live session must match for a turn to reuse it: a session holding another system prompt is loaded again. */
 export function liveSessionKey(sessionKey: string, system: string | undefined): string {
   return system === undefined ? sessionKey : JSON.stringify([sessionKey, createHash("sha256").update(system).digest("hex")]);
+}
+
+/** Whether session `sessionId` was last given another system prompt than `system`. The native Antigravity CLI (1.5.18)
+ * keeps the prompt a session was created with and adds a resume's prompt after it, so resuming that session would show
+ * the model both. */
+export function heldSystemChanged(scope: string, threadId: string, sessionId: string, turn: SendTurnInput, system: string | undefined): boolean {
+  const stable = promptHalves(turn).stable;
+  if (system === undefined || stable === null) return false;
+  const receipt = readPromptSplitReceipt(scope, JSON.stringify([threadId, sessionId]));
+  return receipt !== null && receipt.stable !== promptSplitFingerprints(stable, "").stable;
 }
 
 export interface TurnPrompt {
