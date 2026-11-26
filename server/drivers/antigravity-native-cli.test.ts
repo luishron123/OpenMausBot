@@ -7,7 +7,7 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { distrustHomePrograms } from "../bot-box/program-trust.ts";
-import { ensureDirs } from "../config.ts";
+import { DATA_DIR, ensureDirs } from "../config.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { antigravityRuntimesRoot } from "../engine-roots.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
@@ -25,6 +25,7 @@ import { resolveAntigravityReleaseAsset } from "./antigravity-release.ts";
 import { antigravityCliUpdate, installAntigravityRuntime, resolveAntigravityRuntime } from "./antigravity-runtime.ts";
 import { antigravityManagedRuntime } from "../engine-updates-host.ts";
 import { createEngineUpdater } from "../engine-updates.ts";
+import { withoutHistoryNote } from "./acp/session-system.ts";
 import { AntigravityDriver } from "./antigravity.ts";
 
 // The opt-in, before any module reads it: this file tests the native CLI switched on.
@@ -551,9 +552,9 @@ describe.skipIf(WINDOWS)("a native CLI set as the engine's own path", () => {
     });
     const recorder = recordEvents(instance.adapter);
     let resumeCursor: string | undefined;
-    const send = async (text: string, stable: string, volatile: string, recoveryText?: string) => {
+    const send = async (text: string, stable: string | null, volatile: string, recoveryText?: string) => {
       const { turnId } = await instance.adapter.sendTurn({
-        threadId: name, text, cwd: fake.directory, system: stable + volatile, systemStable: stable, systemVolatile: volatile, resumeCursor, recoveryText,
+        threadId: name, text, cwd: fake.directory, system: (stable ?? "") + volatile, ...(stable === null ? {} : { systemStable: stable, systemVolatile: volatile }), resumeCursor, recoveryText,
       });
       expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId)).toMatchObject({ ok: true });
       resumeCursor = (recorder.events.findLast((event) => event.type === "session.started" && event.turnId === turnId) as { sessionId: string } | undefined)?.sessionId ?? resumeCursor;
@@ -587,6 +588,40 @@ describe.skipIf(WINDOWS)("a native CLI set as the engine's own path", () => {
 
     expect(await thread.send("fourth", revised, MEMORY)).toEqual([{ type: "text", text: "fourth" }]);
     expect(thread.setups()).toHaveLength(2);
+  }, 90_000);
+
+  const APPEND = { FAKE_ACP_CAPABILITIES_META: JSON.stringify({ antigravity: { systemPrompt: { append: true } } }) };
+  const revisedSetup = (thread: Awaited<ReturnType<typeof systemThread>>, system: string) => {
+    expect(thread.setups().map((call) => call.method)).toEqual(["session/new", "session/new"]);
+    expect(thread.setups().at(-1)).toEqual(expect.objectContaining({ meta: { antigravity: { systemPrompt: { append: system } } } }));
+  };
+
+  it("opens a new session for a revised prompt after a compaction dropped the context receipt", async () => {
+    const thread = await systemThread("system-compacted", APPEND);
+    await thread.send("first", RULES, MEMORY);
+    rmSync(join(DATA_DIR, "prompt-split"), { recursive: true, force: true });
+    const revised = RULES + " Reply in French.";
+    await thread.send("second", revised, MEMORY, "user: first\nuser: second");
+    revisedSetup(thread, revised);
+  }, 90_000);
+
+  it("opens a new session when a prompt with no stable half changes", async () => {
+    const thread = await systemThread("system-unsplit", APPEND);
+    await thread.send("first", null, RULES);
+    expect(await thread.send("second", null, RULES)).toEqual([{ type: "text", text: "second" }]);
+    expect(thread.setups()).toHaveLength(1);
+    const revised = RULES + " Reply in French.";
+    await thread.send("third", null, revised, "user: first\nuser: second\nuser: third");
+    revisedSetup(thread, revised);
+  }, 90_000);
+
+  it("goes on in a new session, with a note, when a revised prompt comes without the conversation to rebuild from", async () => {
+    const thread = await systemThread("system-no-recovery", APPEND);
+    await thread.send("first", RULES, MEMORY);
+    const revised = RULES + " Reply in French.";
+    const [second] = await thread.send("second", revised, MEMORY);
+    expect(second!.text).toBe(withoutHistoryNote("second"));
+    revisedSetup(thread, revised);
   }, 90_000);
 
   it("keeps the system prompt in the text for a CLI that does not say it takes one", async () => {

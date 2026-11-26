@@ -19,7 +19,7 @@ import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, deviceAuthInstanceSurface, type DeviceSignIn } from "../device-auth.ts";
 import { AcpBrowserAuth, acpBrowserAuthInstanceSurface, type AcpBrowserSignInSpec } from "./browser-auth.ts";
 import { commitPromptSplitReceipt, deletePromptSplitReceipt, type PendingPromptSplitReceipt } from "../prompt-split.ts";
-import { heldSystemChanged, liveSessionKey, sessionSystem, turnPrompt } from "./session-system.ts";
+import { heldSystemChanged, liveSessionKey, newSessionKey, sessionSystem, turnPrompt, withoutHistoryNote } from "./session-system.ts";
 import { boxAudienceKey, describeSpawnFailure, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts"; import { execCliProbe } from "../../cli-probe-cache.ts"; import { stopEngineTree, stopEngineTrees } from "../../engine-stop.ts";
 import { applyOneShotEnv, oneShotTurnModel, runAcpOneShot } from "./background-text.ts"; import type { AcpBackgroundWork } from "./background-work.ts";
 import { acpCapabilities } from "./capabilities.ts"; import { ACP_MEDIA_MAX_BYTES, readAcpMediaLinks } from "./media-links.ts";
@@ -1170,18 +1170,14 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               }
               sessionAllows.delete(threadId);
               if (cursor) {
-                if (!turn.recoveryText?.trim()) throw new Error(`${support.displayName} session could not be resumed and the turn carries no recovery text to rebuild from`);
-                const recovery = recoveryPromptFor({
-                  recoveryText: turn.recoveryText,
-                  currentText: turn.text,
-                  failure: "before-accept",
-                });
-                promptTurn = { ...turn, text: recovery.text };
+                if (!turn.recoveryText?.trim() && !otherSystem) throw new Error(`${support.displayName} session could not be resumed and the turn carries no recovery text to rebuild from`);
+                const recovery = recoveryPromptFor({ recoveryText: turn.recoveryText, currentText: turn.text, failure: "before-accept" });
+                promptTurn = { ...turn, text: recovery.replayed || !otherSystem ? recovery.text : withoutHistoryNote(recovery.text) };
                 rebuiltFromReplay = recovery.replayed;
               }
               await sessionNewRetried(() => request("session/new", { cwd, mcpServers: support.mcpServersFromLaunch ? [] : acpSessionMcpServers(mcpServers, ownMcp, init, support.takesUnadvertisedHttpMcp, support.sessionToolBudget), ...selectionParams, ...support.sessionSetupParams?.(init, heldSystem()) }, support.sessionSetupTimeoutMs ?? NEW_SESSION_TIMEOUT, (result) => {
                 session.sessionId = typeof result?.sessionId === "string" ? result.sessionId : null;
-                session.sessionKey = liveSessionKey(sessionKey, heldSystem());
+                session.sessionKey = newSessionKey(DRIVER_KIND, threadId, session.sessionId, sessionKey, heldSystem());
                 receiveModelVariants(result, true);
               }), () => session.child.exitCode === null && !session.closing && !session.dead, undefined, threadId); // a busy machine: once more, then plain words
               break;

@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { writeFileAtomic } from "../../atomic.ts";
+import { DATA_DIR } from "../../config.ts";
 import type { SendTurnInput } from "../../contracts.ts";
 import { promptHalves, promptSplitFingerprints, readPromptSplitReceipt, splitSessionNote, splitSessionPrompt, type PromptSplitReceipt } from "../prompt-split.ts";
 import type { AcpDriverHooks } from "./driver-hooks.ts";
@@ -16,14 +20,44 @@ export function liveSessionKey(sessionKey: string, system: string | undefined): 
   return system === undefined ? sessionKey : JSON.stringify([sessionKey, createHash("sha256").update(system).digest("hex")]);
 }
 
-/** Whether session `sessionId` was last given another system prompt than `system`. The native Antigravity CLI (1.5.18)
- * keeps the prompt a session was created with and adds a resume's prompt after it, so resuming that session would show
- * the model both. */
+const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+const heldSystemPath = (scope: string, threadId: string, sessionId: string) =>
+  join(DATA_DIR, "session-system", digest(JSON.stringify([scope, threadId, sessionId])) + ".json");
+
+/** The live-session key of a session just created with `system`, which is recorded as the prompt that session holds. */
+export function newSessionKey(scope: string, threadId: string, sessionId: string | null, sessionKey: string, system: string | undefined): string {
+  if (sessionId !== null && system !== undefined) {
+    mkdirSync(join(DATA_DIR, "session-system"), { recursive: true });
+    writeFileAtomic(heldSystemPath(scope, threadId, sessionId), JSON.stringify({ system: digest(system) }), { mode: 0o600 });
+  }
+  return liveSessionKey(sessionKey, system);
+}
+
+function recordedSystem(scope: string, threadId: string, sessionId: string): string | null {
+  try {
+    const record = JSON.parse(readFileSync(heldSystemPath(scope, threadId, sessionId), "utf8")) as { system?: unknown };
+    return typeof record.system === "string" ? record.system : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether session `sessionId` holds another system prompt than `system`. The native Antigravity CLI (1.5.18) keeps the
+ * prompt a session was created with and adds a resume's prompt after it, so resuming that session would show the model
+ * both. A session created before its prompt was recorded is judged by the prompt-split receipt of its last turn. */
 export function heldSystemChanged(scope: string, threadId: string, sessionId: string, turn: SendTurnInput, system: string | undefined): boolean {
+  if (system === undefined) return false;
+  const recorded = recordedSystem(scope, threadId, sessionId);
+  if (recorded !== null) return recorded !== digest(system);
   const stable = promptHalves(turn).stable;
-  if (system === undefined || stable === null) return false;
+  if (stable === null) return false;
   const receipt = readPromptSplitReceipt(scope, JSON.stringify([threadId, sessionId]));
   return receipt !== null && receipt.stable !== promptSplitFingerprints(stable, "").stable;
+}
+
+/** A turn that starts a new session for a revised system prompt with no conversation to rebuild it from. */
+export function withoutHistoryNote(text: string): string {
+  return `${text}\n\n(Your instructions changed, so this conversation continues in a new session: earlier messages are not in it.)`;
 }
 
 export interface TurnPrompt {
