@@ -19,7 +19,7 @@ import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, deviceAuthInstanceSurface, type DeviceSignIn } from "../device-auth.ts";
 import { AcpBrowserAuth, acpBrowserAuthInstanceSurface, type AcpBrowserSignInSpec } from "./browser-auth.ts";
 import { commitPromptSplitReceipt, deletePromptSplitReceipt, type PendingPromptSplitReceipt } from "../prompt-split.ts";
-import { heldSystemChanged, liveSessionKey, newSessionKey, sessionSystem, turnPrompt, withoutHistoryNote } from "./session-system.ts";
+import { heldSystemChanged, liveSessionKey, recordHeldSystem, sessionSystem, turnPrompt, withoutHistoryNote } from "./session-system.ts";
 import { boxAudienceKey, describeSpawnFailure, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts"; import { execCliProbe } from "../../cli-probe-cache.ts"; import { stopEngineTree, stopEngineTrees } from "../../engine-stop.ts";
 import { applyOneShotEnv, oneShotTurnModel, runAcpOneShot } from "./background-text.ts"; import type { AcpBackgroundWork } from "./background-work.ts";
 import { acpCapabilities } from "./capabilities.ts"; import { ACP_MEDIA_MAX_BYTES, readAcpMediaLinks } from "./media-links.ts";
@@ -1142,7 +1142,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                       if (result) {
                         loaded = true;
                         session.sessionId = cursor;
-                        session.sessionKey = newSessionKey(DRIVER_KIND, threadId, cursor, sessionKey, heldSystem());
+                        session.sessionKey = liveSessionKey(sessionKey, heldSystem());
                         receiveModelVariants(result, true);
                       }
                     },
@@ -1157,7 +1157,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                       || ((error as any)?.code === -32602 && !missingSession)) throw error;
                 }
               }
-              if (loaded) break;
+              if (loaded) { recordHeldSystem(DRIVER_KIND, threadId, cursor, heldSystem()); break; }
               if (cursor && liveSessionId === cursor && !otherSystem) {
                 session.current = null;
                 closeSession(threadId, "reestablish");
@@ -1177,9 +1177,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               }
               await sessionNewRetried(() => request("session/new", { cwd, mcpServers: support.mcpServersFromLaunch ? [] : acpSessionMcpServers(mcpServers, ownMcp, init, support.takesUnadvertisedHttpMcp, support.sessionToolBudget), ...selectionParams, ...support.sessionSetupParams?.(init, heldSystem()) }, support.sessionSetupTimeoutMs ?? NEW_SESSION_TIMEOUT, (result) => {
                 session.sessionId = typeof result?.sessionId === "string" ? result.sessionId : null;
-                session.sessionKey = newSessionKey(DRIVER_KIND, threadId, session.sessionId, sessionKey, heldSystem());
+                session.sessionKey = liveSessionKey(sessionKey, heldSystem());
                 receiveModelVariants(result, true);
               }), () => session.child.exitCode === null && !session.closing && !session.dead, undefined, threadId); // a busy machine: once more, then plain words
+              recordHeldSystem(DRIVER_KIND, threadId, session.sessionId, heldSystem());
               break;
             }
             const sessionId = session.sessionId;

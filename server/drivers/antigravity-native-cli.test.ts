@@ -648,6 +648,37 @@ describe.skipIf(WINDOWS)("a native CLI set as the engine's own path", () => {
     ]);
   }, 90_000);
 
+  it("finishes the turn when the prompt a session holds cannot be recorded", async () => {
+    ensureDirs();
+    const records = join(DATA_DIR, "session-system");
+    rmSync(records, { recursive: true, force: true });
+    writeFileSync(records, "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const thread = await systemThread("system-record-fails", APPEND);
+      expect(await thread.send("first", RULES, MEMORY)).toEqual([{ type: "text", text: "first" }, { type: "text", text: expect.stringContaining(MEMORY.trim()) }]);
+      const resumed = await systemThread("system-record-fails-resumed", APPEND, { threadId: "system-record-fails", resumeCursor: thread.sessionId() });
+      expect((await resumed.send("second", RULES, MEMORY))[0]).toEqual({ type: "text", text: "second" });
+      expect(resumed.setups()).toEqual([expect.objectContaining({ method: "session/resume", sessionId: thread.sessionId() })]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("could not record the system prompt a session holds"));
+    } finally {
+      warn.mockRestore();
+      rmSync(records, { force: true });
+    }
+  }, 90_000);
+
+  it("writes a session's prompt record only when it changes", async () => {
+    const thread = await systemThread("system-record-once", APPEND);
+    await thread.send("first", RULES, MEMORY);
+    const [record] = readdirSync(join(DATA_DIR, "session-system"))
+      .map((name) => join(DATA_DIR, "session-system", name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    const written = statSync(record!).ino;
+    const resumed = await systemThread("system-record-once-resumed", APPEND, { threadId: "system-record-once", resumeCursor: thread.sessionId() });
+    await resumed.send("second", RULES, MEMORY);
+    expect(resumed.setups()).toEqual([expect.objectContaining({ method: "session/resume" })]);
+    expect(statSync(record!).ino).toBe(written);
+  }, 90_000);
+
   it("goes on in a new session, with a note, when a revised prompt comes without the conversation to rebuild from", async () => {
     const thread = await systemThread("system-no-recovery", APPEND);
     await thread.send("first", RULES, MEMORY);

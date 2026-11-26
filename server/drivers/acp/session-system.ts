@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { writeFileAtomic } from "../../atomic.ts";
+import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { DATA_DIR } from "../../config.ts";
 import type { SendTurnInput } from "../../contracts.ts";
 import { promptHalves, promptSplitFingerprints, readPromptSplitReceipt, splitSessionNote, splitSessionPrompt, type PromptSplitReceipt } from "../prompt-split.ts";
@@ -24,13 +24,16 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 const heldSystemPath = (scope: string, threadId: string, sessionId: string) =>
   join(DATA_DIR, "session-system", digest(JSON.stringify([scope, threadId, sessionId])) + ".json");
 
-/** The live-session key of a session just created or resumed with `system`, which is recorded as the prompt that session holds. */
-export function newSessionKey(scope: string, threadId: string, sessionId: string | null, sessionKey: string, system: string | undefined): string {
-  if (sessionId !== null && system !== undefined) {
+/** Records `system` as the prompt session `sessionId` holds. A failed write is logged, not thrown: the turn goes on, and
+ * the session's next resume is judged without the record. */
+export function recordHeldSystem(scope: string, threadId: string, sessionId: string | null, system: string | undefined): void {
+  if (sessionId === null || system === undefined) return;
+  try {
     mkdirSync(join(DATA_DIR, "session-system"), { recursive: true });
-    writeFileAtomic(heldSystemPath(scope, threadId, sessionId), JSON.stringify({ system: digest(system) }), { mode: 0o600 });
+    writeFileAtomicIfChanged(heldSystemPath(scope, threadId, sessionId), JSON.stringify({ system: digest(system) }), { mode: 0o600 });
+  } catch (error) {
+    console.warn(`[${scope}] could not record the system prompt a session holds (${error instanceof Error ? error.message : String(error)})`);
   }
-  return liveSessionKey(sessionKey, system);
 }
 
 function recordedSystem(scope: string, threadId: string, sessionId: string): string | null {
