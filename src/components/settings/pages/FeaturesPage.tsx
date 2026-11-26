@@ -10,8 +10,8 @@ const COPY: Record<Feature, { title: LocaleKey; line: LocaleKey }> = {
   skillBurger: { title: "settings.features.skillBurger", line: "settings.features.skillBurgerLine" },
   threadTabs: { title: "settings.features.threadTabs", line: "settings.features.threadTabsLine" },
   panels: { title: "settings.features.panels", line: "settings.features.panelsLine" },
-  roomFeed: { title: "settings.features.roomFeed", line: "settings.features.roomFeedLine" },
   teamBoard: { title: "settings.features.teamBoard", line: "settings.features.teamBoardLine" },
+  suggestedReplies: { title: "settings.features.suggestedReplies", line: "settings.features.suggestedRepliesLine" },
 };
 
 /** One switch kept in this place's config.json; shown once its server says it knows the switch (the board: only a Team Cloud's). */
@@ -51,7 +51,7 @@ export function FeaturesPage() {
         <FeatureRow name="skillBurger" />
         <FeatureRow name="threadTabs" />
         <FeatureRow name="panels" />
-        <FeatureRow name="roomFeed" />
+        <FeatureRow name="suggestedReplies" />
         <FeatureRow name="teamBoard" />
       </SettingsRows>
     </SettingsGroup>

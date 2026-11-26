@@ -7,7 +7,7 @@ import { ELEVATED_FLOAT, ELEVATED_HOVER } from "./elevated";
 
 export function NewThreadHeaderButton({ botId }: { botId: string }) {
   const dispatch = useStoreDispatch();
-  const tabs = useThreadTabsShown(botId);
+  const tabs = useThreadTabsShown();
   return (
     <button
       type="button"

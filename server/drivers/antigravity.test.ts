@@ -39,7 +39,6 @@ import { installAntigravityRuntime, resolveAntigravityRuntime } from "./antigrav
 import * as antigravityTemp from "./antigravity-temp.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, sweepAntigravityTemp } from "./antigravity-temp.ts";
 import {
-  ANTIGRAVITY_MCP_TOOL_CHARS,
   AntigravityDriver,
   STATIC_ANTIGRAVITY_MODELS,
   antigravityPermissionMode,
@@ -1022,13 +1021,14 @@ describe("Antigravity driver over shared ACP", () => {
       { method: "session/set_config_option", params: { sessionId: "fake-acp-session", configId: "mode", value: approvalMode === "full" ? "yolo" : approvalMode === "edits" ? "auto_edit" : "default" } },
       { method: "session/set_config_option", params: { sessionId: "fake-acp-session", configId: "thinking_level", value: "high" } },
     ]);
-    const mcp = JSON.parse(readFileSync(`${dump}.mcp.json`, "utf8"));
-    // The CLI drops the largest tools past its size budget, so the server runs behind the gate that lists only its share.
-    expect(mcp).toHaveLength(1);
-    const docsEnv = Object.fromEntries((mcp[0].env as { name: string; value: string }[]).map(({ name, value }) => [name, value]));
-    expect(mcp[0].name).toBe("docs");
-    expect(JSON.parse(docsEnv.OMB_GATE_UPSTREAM!)).toEqual({ command: "docs-mcp", args: ["serve"], env: { TOKEN: "scoped" } });
-    expect(docsEnv.OMB_TOOL_CHARS).toBe(String(ANTIGRAVITY_MCP_TOOL_CHARS));
+    const mcp = JSON.parse(readFileSync(`${dump}.mcp.json`, "utf8")) as Array<{ name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> }>;
+    // Under a schema profile (the Gemini engine) the person's stdio server goes through the MCP gate.
+    const docs = mcp.find((server) => server.name === "docs");
+    expect(docs).toBeDefined();
+    expect(docs!.command).toBe(process.execPath);
+    expect(docs!.args[0]).toContain("mcp-gate");
+    const upstream = JSON.parse(docs!.env.find((entry) => entry.name === "OMB_GATE_UPSTREAM")!.value) as { command: string; args: string[]; env: Record<string, string> };
+    expect(upstream).toEqual({ command: "docs-mcp", args: ["serve"], env: { TOKEN: "scoped" } });
     // Checked on every OS, so the macOS and Linux runs prove the dump carries TEMP.
     const expectedTemp = process.platform === "win32" ? antigravityTempDir(DATA_DIR, instanceId) : fake.directory;
     expect([dumpState.env.TEMP, dumpState.env.TMP]).toEqual([expectedTemp, expectedTemp]);

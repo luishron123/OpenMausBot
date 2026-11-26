@@ -8,9 +8,6 @@ import { CHAT_TOOL_LIMIT } from "../shared/tool-budget.ts";
 export const TOOL_LIMIT_ENV = "OMB_TOOL_LIMIT";
 /** The same on OpenMausBot's own MCP endpoints, reached over HTTP. */
 export const TOOL_LIMIT_HEADER = "x-omb-tool-limit";
-/** The most characters of tool JSON one MCP server lists for this turn: an engine that drops tools past a size, not a count. */
-export const TOOL_CHARS_ENV = "OMB_TOOL_CHARS";
-export const TOOL_CHARS_HEADER = "x-omb-tool-chars";
 
 export function parseToolLimit(value: unknown): number | undefined {
   return typeof value === "string" && /^\d{1,5}$/.test(value) ? Number(value) : undefined;
@@ -20,46 +17,19 @@ export function toolLimitFromEnv(env: Record<string, string | undefined> = proce
   return parseToolLimit(env[TOOL_LIMIT_ENV]);
 }
 
-export function parseToolChars(value: unknown): number | undefined {
-  return typeof value === "string" && /^\d{1,7}$/.test(value) ? Number(value) : undefined;
-}
-
-export function toolCharsFromEnv(env: Record<string, string | undefined> = process.env): number | undefined {
-  return parseToolChars(env[TOOL_CHARS_ENV]);
-}
-
-/** One tool's size as an engine that counts characters sees it. */
-export function toolChars(tool: unknown): number {
-  return JSON.stringify(tool)?.length ?? 0;
-}
-
-/** The first tools in the server's order whose sizes add up to at most `chars`. */
-export function capToolChars<T>(tools: readonly T[], chars: number | undefined): T[] {
-  if (chars === undefined) return [...tools];
-  let used = 0;
-  const kept: T[] = [];
-  for (const tool of tools) {
-    used += toolChars(tool);
-    if (used > chars) break;
-    kept.push(tool);
-  }
-  return kept;
-}
-
 /** The first `limit` tools in the server's own order, which puts its main tools first. */
 export function capToolList<T>(tools: readonly T[], limit: number | undefined): T[] {
   return limit === undefined || tools.length <= limit ? [...tools] : tools.slice(0, limit);
 }
 
-/** A `tools/list` result under `limit` tools and `chars` characters, one line to `log` with the counts when tools are left
- * out. A capped server lists one page: a later page would pass its share. */
-export function capToolListResult(result: unknown, limit: number | undefined, log?: (line: string) => void, chars?: number): unknown {
-  if ((limit === undefined && chars === undefined) || !result || typeof result !== "object" || Array.isArray(result)) return result;
+/** A `tools/list` result under `limit`, one line to `log` with the counts when tools are left out. A capped server lists
+ * one page: a later page would pass its share. */
+export function capToolListResult(result: unknown, limit: number | undefined, log?: (line: string) => void): unknown {
+  if (limit === undefined || !result || typeof result !== "object" || Array.isArray(result)) return result;
   const { tools, nextCursor: _next, ...rest } = result as { tools?: unknown; nextCursor?: unknown };
   if (!Array.isArray(tools)) return result;
-  const kept = capToolChars(capToolList(tools, limit), chars);
-  if (kept.length < tools.length) log?.(`listed ${kept.length} of ${tools.length} tools to fit the model's tool limit`);
-  return { ...rest, tools: kept };
+  if (tools.length > limit) log?.(`listed ${limit} of ${tools.length} tools to fit the model's tool limit`);
+  return { ...rest, tools: capToolList(tools, limit) };
 }
 
 /**

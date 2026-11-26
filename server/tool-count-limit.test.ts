@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  capToolListResult, chatToolLimitFor, chatToolLimitKey, forgetToolCountLimits, learnedToolCountLimit, learnToolCountLimit, mcpToolBudget, shareToolBudget, toolChars,
-  toolCharsFromEnv, toolCountLimitFromError,
+  capToolListResult, chatToolLimitFor, chatToolLimitKey, forgetToolCountLimits, learnedToolCountLimit, learnToolCountLimit, mcpToolBudget, shareToolBudget, toolCountLimitFromError,
 } from "./tool-count-limit.ts";
 
 afterEach(() => forgetToolCountLimits());
@@ -55,21 +54,6 @@ describe("a capped tools/list result", () => {
     const lines: string[] = [];
     expect(capToolListResult({ tools, nextCursor: "2" }, 3, (line) => lines.push(line))).toEqual({ tools: tools.slice(0, 3) });
     expect(lines).toEqual(["listed 3 of 5 tools to fit the model's tool limit"]);
-  });
-
-  it("keeps the first tools whose JSON fits a character share, under the count too", () => {
-    const lines: string[] = [];
-    expect(toolChars(tools[0])).toBe(13);
-    expect(capToolListResult({ tools }, undefined, (line) => lines.push(line), 39)).toEqual({ tools: tools.slice(0, 3) });
-    expect(capToolListResult({ tools }, 2, undefined, 39)).toEqual({ tools: tools.slice(0, 2) });
-    expect(capToolListResult({ tools }, undefined, undefined, 12)).toEqual({ tools: [] });
-    expect(lines).toEqual(["listed 3 of 5 tools to fit the model's tool limit"]);
-  });
-
-  it("reads a character share only as plain digits", () => {
-    expect(toolCharsFromEnv({ OMB_TOOL_CHARS: "55000" })).toBe(55_000);
-    expect(toolCharsFromEnv({ OMB_TOOL_CHARS: "5e4" })).toBeUndefined();
-    expect(toolCharsFromEnv({})).toBeUndefined();
   });
 
   it("is the result as it came without a limit or a list", () => {

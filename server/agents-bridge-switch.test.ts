@@ -136,7 +136,7 @@ describe("which engines a turn is bridged on", () => {
   it.each([
     // ACP agents keep their own permissions, Grok among them
     ["grokAgent"], ["geminiAgent"], ["qwenAgent"], ["kimiAgent"], ["droidAgent"], ["cursorAgent"], ["clineAgent"], ["copilotAgent"], ["hermesAgent"],
-    ["opencodeGo"], ["customAcp"], ["ompAgent"],
+    ["opencodeGo"], ["antigravityAgent"], ["customAcp"], ["ompAgent"],
     // not shown to qualify, and anything nobody has heard of
     ["museCode"], ["someFutureDriver"], [""],
   ])("does not bridge %s", (driverKind) => {
@@ -152,10 +152,10 @@ describe("which engines a turn is bridged on", () => {
   it("sorts the default fleet the same way: its Claude and API-model engines, and none of Codex, Pi or its ACP agents", () => {
     const fleet = instanceConfigs({});
     const bridged = new Set(Object.entries(fleet).filter(([, instance]) => engineBridgeRefusal(ON, turnEngine({ instanceId: "any", driverKind: instance.driver }, { any: instance }, { version: "2.1.232 (Claude Code)" }, CLAUDE.cwd), {}, HOST) === null).map(([id]) => id));
-    for (const id of ["claude", "openaiCompat", "mistral", "cerebras", "groq", "greenference", "modelgo", "meta", "antigravity"]) expect(bridged.has(id), id).toBe(true);
+    for (const id of ["claude", "openaiCompat", "mistral", "cerebras", "groq", "greenference", "modelgo", "meta"]) expect(bridged.has(id), id).toBe(true);
     // the default `grok` is the ACP agent, not the API-key driver
-    for (const id of ["codex", "chatgpt", "pi", "grok", "kimi", "droid", "cursor", "opencodeGo", "museCode", "qwen", "hermes", "cline"]) expect(bridged.has(id), id).toBe(false);
-    for (const id of bridged) expect(["claudeAgent", "antigravityAgent", "openai-compat", "cerebras", "greenference", "modelgo", "grok", "groq", "meta", "minimax", "mistral"], id).toContain(fleet[id]!.driver);
+    for (const id of ["codex", "chatgpt", "pi", "grok", "kimi", "droid", "cursor", "antigravity", "opencodeGo", "museCode", "qwen", "hermes", "cline"]) expect(bridged.has(id), id).toBe(false);
+    for (const id of bridged) expect(["claudeAgent", "openai-compat", "cerebras", "greenference", "modelgo", "grok", "groq", "meta", "minimax", "mistral"], id).toContain(fleet[id]!.driver);
   });
 
   describe("Claude Code's exceptions", () => {
@@ -555,25 +555,6 @@ describe("a bot on a local model gets the bridge without the switch", () => {
   });
 });
 
-describe("an Antigravity turn gets the bridge without the switch", () => {
-  // The CLI drops the largest MCP tools past a size and offers no loader: unbridged, show_html and coordinate_bots never reach the model.
-  const ANTIGRAVITY = { driverKind: "antigravityAgent" };
-
-  it("on any model", () => {
-    expect(agentsToolBridgeRefusal({}, { modelSelection: { model: "gemini-3.6-flash" } }, ANTIGRAVITY, {})).toBeNull();
-    expect(agentsToolBridgeEnv({}, bot, ANTIGRAVITY, {})).toEqual(on);
-  });
-
-  it("not when the operator's variable says no, nor for a bot with a tool selection", () => {
-    expect(agentsToolBridgeRefusal(ON, {}, ANTIGRAVITY, { OMB_AGENTS_TOOL_BRIDGE: "0" })).toBe("the switch is off");
-    expect(agentsToolBridgeRefusal({}, { toolScope: { allow: ["native:read"] } }, ANTIGRAVITY, {})).toBe("the bot has a tool selection");
-  });
-
-  it("only on Antigravity among the ACP agents", () => {
-    for (const driverKind of ["geminiAgent", "grokAgent", "customAcp"]) expect(agentsToolBridgeRefusal({}, {}, { driverKind }, {})).toBe("the switch is off");
-  });
-});
-
 describe("which bots a turn is bridged for", () => {
   it("writes the switch on every turn, so a value inherited from the server's own environment cannot stand in", () => {
     expect(agentsToolBridgeEnv({}, bot, CLAUDE, {})).toEqual(off);
@@ -834,8 +815,9 @@ describe("the prompt of a bridged turn", () => {
   const bridged = { env: { OMB_AGENTS_TOOL_BRIDGE: "1", OMB_BOT_ID: "bot-1" } };
 
   it("is unchanged, to the byte, without the bridge", () => {
-    const plain = buildSystemPrompt("You are Kiwi.", "Be brief.", parts);
-    expect(buildSystemPrompt("You are Kiwi.", "Be brief.", parts, undefined)).toEqual(plain);
+    // With the agents tools mounted the reply habits also say how to publish; nothing else differs.
+    expect(buildSystemPrompt("You are Kiwi.", "Be brief.", parts, undefined)).toEqual(buildSystemPrompt("You are Kiwi.", "Be brief.", parts));
+    const plain = buildSystemPrompt("You are Kiwi.", "Be brief.", parts, { env: {} });
     expect(buildSystemPrompt("You are Kiwi.", "Be brief.", parts, { env: { OMB_AGENTS_TOOL_BRIDGE: "0" } })).toEqual(plain);
     expect(buildSystemPrompt("You are Kiwi.", "Be brief.", parts, { env: {} })).toEqual(plain);
     expect(buildSystemPrompt("You are Kiwi.", "Be brief.", parts, {})).toEqual(plain);
@@ -851,7 +833,7 @@ describe("the prompt of a bridged turn", () => {
     expect(section.bytes).toBe(Buffer.byteLength(AGENTS_TOOL_BRIDGE_PROMPT, "utf8"));
     expect(built.text.split(AGENTS_TOOL_BRIDGE_PROMPT)).toHaveLength(2);
     // every other section is exactly what it was
-    const plain = buildSystemPrompt("You are Kiwi.", "Be brief.", parts);
+    const plain = buildSystemPrompt("You are Kiwi.", "Be brief.", parts, { env: {} });
     expect(built.sections.filter((entry) => entry.id !== "tool-bridge")).toEqual(plain.sections);
     expect(built.text.replace(AGENTS_TOOL_BRIDGE_PROMPT, "")).toBe(plain.text);
     // the decision's own output is what switches it: off for an engine or a bot that is turned down

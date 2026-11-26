@@ -1,7 +1,7 @@
 import type { Notification } from "../../shared/notification";
 import { plainPreviewText } from "../../shared/plain-preview";
 import { notificationSound, type SoundOutcome } from "./app-sounds";
-import { finishedNotificationsEnabled } from "./notification-preferences";
+import { finishedNotificationsEnabled, reportNotificationsEnabled } from "./notification-preferences";
 
 export type NotifyFrame = Notification & { id?: string; read?: boolean };
 
@@ -41,7 +41,7 @@ export function showNotification(
   const viewing = typeof document !== "undefined" && document.hasFocus() && visibleThreadId === frame.threadId;
   const sound = notificationSound(frame, viewing);
   if (typeof Notification === "undefined") return;
-  if (frame.kind === "done" && !finishedNotificationsEnabled()) return;
+  if (frame.kind === "done" && !(frame.routine ? reportNotificationsEnabled() : finishedNotificationsEnabled())) return;
   if (frame.kind !== "spend" && viewing) return;
   if (Notification.permission !== "granted") return;
   if (typeof sound === "string") showBanner(frame, onOpen, avatarUrl, sound);

@@ -81,14 +81,6 @@ export function bridgedCallTarget(name: string, args: unknown): string | undefin
   return typeof target === "string" && target.trim() ? target : undefined;
 }
 
-/** Security: an ACP permission request for the agents server's use_tool, in any engine's spelling (Antigravity titles it
- * `Run mcp_agents_use_tool`). A grant past this one call would also cover every other hidden tool, so the driver never
- * answers one with "always allow" and never remembers it for the session. A bare `use_tool` counts too: never wider. */
-export function acpBridgeCallRequest(toolCall: { name?: unknown; title?: unknown } | null | undefined): boolean {
-  return [toolCall?.name, toolCall?.title].some((value) => typeof value === "string"
-    && /^(?:Run )?(?:mcp__agents__|mcp_agents_|agents__|agents_)?use_tool$/.test(value.trim()));
-}
-
 /** A call's name once seen: an agents use_tool naming a catalog tool reads as that tool, in the engine's
  * spelling. `input` may be a driver's cut JSON preview; a name past the cut keeps the original title.
  * `bare` false leaves a title with no server alone: a plain `use_tool` could be any server's. */
