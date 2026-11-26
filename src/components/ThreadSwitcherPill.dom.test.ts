@@ -95,7 +95,7 @@ describe("the pill's thread switcher", () => {
     act(() => q("[data-chathead-threads]")!.click());
     act(() => chips()[2].click());
     expect(sent()).toEqual([{ type: "switchTask", botId: "pepper", threadId: "trip" }]);
-    act(() => root!.render(createElement(ChatHeadPill, { bot: pepper(THREADS, "trip"), avatar: {} as never, privacy: null, onToggle, switcher: true })));
+    render(pepper(THREADS, "trip"));
     act(() => { document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
     expect(q("[role=listbox]")).not.toBeNull();
     expect(chips()[2].getAttribute("aria-selected")).toBe("true");
@@ -105,7 +105,7 @@ describe("the pill's thread switcher", () => {
     render(pepper(THREADS, "launch"));
     act(() => q("[data-chathead-threads]")!.click());
     const other = { ...pepper(THREADS, "launch"), id: "rex", name: "Rex" } as Bot;
-    act(() => root!.render(createElement(ChatHeadPill, { bot: other, avatar: {} as never, privacy: null, onToggle, switcher: true })));
+    render(other);
     expect(q("[role=listbox]")).toBeNull();
   });
 
@@ -133,7 +133,7 @@ describe("the pill's thread switcher", () => {
     render(pepper(THREADS, "launch"));
     act(() => q("[data-chathead-threads]")!.click());
     act(() => chips()[2].click());
-    act(() => root!.render(createElement(ChatHeadPill, { bot: pepper(THREADS, "trip"), avatar: {} as never, privacy: null, onToggle, switcher: true })));
+    render(pepper(THREADS, "trip"));
     const composer = document.body.appendChild(document.createElement("textarea"));
     act(() => composer.focus());
     act(() => { composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
@@ -174,10 +174,10 @@ describe("the pill's thread switcher", () => {
   it("Ctrl+Tab walks the threads in the order the pill lists them, wrapping", () => {
     const helper = task("brief", "Launch brief", 4, { openedBy: { botId: "lead", name: "Lead", at: 1 } });
     const threads = [...THREADS, helper];
-    render(pepper(threads, "launch"));
+    render(pepper(threads, "sales"));
     act(() => q("[data-chathead-threads]")!.click());
     const order = chips().map((chip) => chip.dataset.threadChip!);
-    expect(order).toEqual(["launch", "sales", "brief", "trip"]);
+    expect(order).toEqual(["sales", "launch", "brief", "trip"]);
     const visited: string[] = [];
     let open = order[0]!;
     for (let step = 0; step < order.length; step += 1) {
