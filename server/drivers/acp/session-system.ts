@@ -24,7 +24,7 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 const heldSystemPath = (scope: string, threadId: string, sessionId: string) =>
   join(DATA_DIR, "session-system", digest(JSON.stringify([scope, threadId, sessionId])) + ".json");
 
-/** The live-session key of a session just created with `system`, which is recorded as the prompt that session holds. */
+/** The live-session key of a session just created or resumed with `system`, which is recorded as the prompt that session holds. */
 export function newSessionKey(scope: string, threadId: string, sessionId: string | null, sessionKey: string, system: string | undefined): string {
   if (sessionId !== null && system !== undefined) {
     mkdirSync(join(DATA_DIR, "session-system"), { recursive: true });
@@ -44,15 +44,16 @@ function recordedSystem(scope: string, threadId: string, sessionId: string): str
 
 /** Whether session `sessionId` holds another system prompt than `system`. The native Antigravity CLI (1.5.18) keeps the
  * prompt a session was created with and adds a resume's prompt after it, so resuming that session would show the model
- * both. A session created before its prompt was recorded is judged by the prompt-split receipt of its last turn. */
+ * both. A session created before its prompt was recorded is judged by the prompt-split receipt of its last turn, and
+ * one with neither is taken as holding another: a new session is opened once and recorded. */
 export function heldSystemChanged(scope: string, threadId: string, sessionId: string, turn: SendTurnInput, system: string | undefined): boolean {
   if (system === undefined) return false;
   const recorded = recordedSystem(scope, threadId, sessionId);
   if (recorded !== null) return recorded !== digest(system);
   const stable = promptHalves(turn).stable;
-  if (stable === null) return false;
+  if (stable === null) return true;
   const receipt = readPromptSplitReceipt(scope, JSON.stringify([threadId, sessionId]));
-  return receipt !== null && receipt.stable !== promptSplitFingerprints(stable, "").stable;
+  return receipt === null || receipt.stable !== promptSplitFingerprints(stable, "").stable;
 }
 
 /** A turn that starts a new session for a revised system prompt with no conversation to rebuild it from. */

@@ -544,17 +544,18 @@ describe.skipIf(WINDOWS)("a native CLI set as the engine's own path", () => {
   const MEMORY = " Memory: likes /plan mode.";
 
   /** Turns on one thread, each returning the prompt the CLI received, with the thread's session/new and session/resume calls. */
-  async function systemThread(name: string, environment: Record<string, string>) {
+  async function systemThread(name: string, environment: Record<string, string>, opened: { threadId?: string; resumeCursor?: string } = {}) {
     const fake = cli();
     const rpc = join(fake.directory, "rpc.jsonl");
+    const threadId = opened.threadId ?? name;
     const instance = await create(`antigravity-cli-${name}`, fake.executable, {
       FAKE_ACP_MODES: "default,plan", FAKE_ACP_DUMP: fake.dump, FAKE_ACP_DUMP_PROMPT: "1", FAKE_ACP_RPC_APPEND_FILE: rpc, ...environment,
     });
     const recorder = recordEvents(instance.adapter);
-    let resumeCursor: string | undefined;
+    let resumeCursor = opened.resumeCursor;
     const send = async (text: string, stable: string | null, volatile: string, recoveryText?: string) => {
       const { turnId } = await instance.adapter.sendTurn({
-        threadId: name, text, cwd: fake.directory, system: (stable ?? "") + volatile, ...(stable === null ? {} : { systemStable: stable, systemVolatile: volatile }), resumeCursor, recoveryText,
+        threadId, text, cwd: fake.directory, system: (stable ?? "") + volatile, ...(stable === null ? {} : { systemStable: stable, systemVolatile: volatile }), resumeCursor, recoveryText,
       });
       expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId)).toMatchObject({ ok: true });
       resumeCursor = (recorder.events.findLast((event) => event.type === "session.started" && event.turnId === turnId) as { sessionId: string } | undefined)?.sessionId ?? resumeCursor;
@@ -613,6 +614,38 @@ describe.skipIf(WINDOWS)("a native CLI set as the engine's own path", () => {
     const revised = RULES + " Reply in French.";
     await thread.send("third", null, revised, "user: first\nuser: second\nuser: third");
     revisedSetup(thread, revised);
+  }, 90_000);
+
+  for (const stable of [RULES, null]) {
+    it(`opens a new session once for a session from before prompts were recorded, ${stable === null ? "unsplit" : "with no context receipt"}`, async () => {
+      const threadId = `system-legacy-${stable === null ? "unsplit" : "split"}`;
+      const thread = await systemThread(threadId, APPEND, { resumeCursor: "legacy-session" });
+      const [first] = await thread.send("second", stable, MEMORY, "user: first\nuser: second");
+      expect(first!.text).toContain("user: first\nuser: second");
+      expect(thread.setups()).toEqual([expect.objectContaining({ method: "session/new", meta: { antigravity: { systemPrompt: { append: stable ?? MEMORY } } } })]);
+      expect(thread.sessionId()).not.toBe("legacy-session");
+
+      // After a restart the recorded session is resumed, not opened again.
+      const restarted = await systemThread(`${threadId}-restarted`, APPEND, { threadId, resumeCursor: thread.sessionId() });
+      expect((await restarted.send("third", stable, MEMORY))[0]).toEqual({ type: "text", text: "third" });
+      expect(restarted.setups()).toEqual([expect.objectContaining({ method: "session/resume", sessionId: thread.sessionId() })]);
+    }, 90_000);
+  }
+
+  it("records the prompt of a session from before prompts were recorded when its context receipt lets it resume", async () => {
+    const threadId = "system-legacy-receipt";
+    const thread = await systemThread(threadId, APPEND);
+    await thread.send("first", RULES, MEMORY);
+    rmSync(join(DATA_DIR, "session-system"), { recursive: true, force: true });
+    const resumed = await systemThread(`${threadId}-resumed`, APPEND, { threadId, resumeCursor: thread.sessionId() });
+    await resumed.send("second", RULES, MEMORY);
+    rmSync(join(DATA_DIR, "prompt-split"), { recursive: true, force: true });
+    const compacted = await systemThread(`${threadId}-compacted`, APPEND, { threadId, resumeCursor: thread.sessionId() });
+    await compacted.send("third", RULES, MEMORY);
+    expect([...resumed.setups(), ...compacted.setups()]).toEqual([
+      expect.objectContaining({ method: "session/resume", sessionId: thread.sessionId() }),
+      expect.objectContaining({ method: "session/resume", sessionId: thread.sessionId() }),
+    ]);
   }, 90_000);
 
   it("goes on in a new session, with a note, when a revised prompt comes without the conversation to rebuild from", async () => {

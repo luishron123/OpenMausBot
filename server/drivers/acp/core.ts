@@ -1142,7 +1142,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                       if (result) {
                         loaded = true;
                         session.sessionId = cursor;
-                        session.sessionKey = liveSessionKey(sessionKey, heldSystem());
+                        session.sessionKey = newSessionKey(DRIVER_KIND, threadId, cursor, sessionKey, heldSystem());
                         receiveModelVariants(result, true);
                       }
                     },
