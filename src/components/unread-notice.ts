@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
 import { botShowsUnread } from "@/lib/bot-unread";
-import { withOtherPlace, type PlacedBot } from "@/lib/place-rows";
 import { roomThreadAttention } from "@/lib/room-threads";
 import { nextUnreadHold, partitionSidebarBots, unreadFilterOrder, unreadFilterSince, unreadSinceByBot, withPrimaryTile, type UnreadHold } from "@/lib/sidebar-layout";
 import { newChatThreadId } from "@/state/new-chat";
@@ -53,13 +52,13 @@ const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.l
 
 /** The bots the sidebar's Unread filter looks at: every bot the sidebar lists when nothing is searched (the bots hidden
  * from it, the welcome screen's bot, the pins and the top tile or Chief slot left out; the other place's rows in), so a
- * search changes neither its count nor its order. */
+ * search changes neither its count nor its order. `bots` is the one list unsearched (the other place's rows already in it). */
 export function unreadFilterBots(
   bots: Bot[],
-  options: { universalPins: boolean; viewerEmail?: string | null; welcoming: string | null; tile: boolean; defaultBotId?: string; placed: readonly PlacedBot[] },
+  options: { universalPins: boolean; viewerEmail?: string | null; welcoming: string | null; tile: boolean; defaultBotId?: string },
 ): Bot[] {
   const parts = partitionSidebarBots(bots, options);
-  const listed = withOtherPlace(options.tile ? withPrimaryTile(parts, options.defaultBotId) : parts, options.placed);
+  const listed = options.tile ? withPrimaryTile(parts, options.defaultBotId) : parts;
   return [...(listed.unsectionedChief ? [listed.unsectionedChief] : []), ...listed.sectionChiefs, ...listed.sectionedBots, ...listed.unsectionedBots];
 }
 

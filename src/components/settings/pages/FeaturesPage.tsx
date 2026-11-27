@@ -10,11 +10,10 @@ const COPY: Record<Feature, { title: LocaleKey; line: LocaleKey }> = {
   skillBurger: { title: "settings.features.skillBurger", line: "settings.features.skillBurgerLine" },
   threadTabs: { title: "settings.features.threadTabs", line: "settings.features.threadTabsLine" },
   panels: { title: "settings.features.panels", line: "settings.features.panelsLine" },
-  teamBoard: { title: "settings.features.teamBoard", line: "settings.features.teamBoardLine" },
   suggestedReplies: { title: "settings.features.suggestedReplies", line: "settings.features.suggestedRepliesLine" },
 };
 
-/** One switch kept in this place's config.json; shown once its server says it knows the switch (the board: only a Team Cloud's). */
+/** One switch kept in this place's config.json; shown once its server says it knows the switch. */
 function FeatureRow({ name }: { name: Feature }) {
   const on = useFeature(name);
   const known = useStoreSelector((state) => typeof state.config?.features?.[name] === "boolean");
@@ -52,7 +51,6 @@ export function FeaturesPage() {
         <FeatureRow name="threadTabs" />
         <FeatureRow name="panels" />
         <FeatureRow name="suggestedReplies" />
-        <FeatureRow name="teamBoard" />
       </SettingsRows>
     </SettingsGroup>
   );

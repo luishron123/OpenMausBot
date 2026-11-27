@@ -1998,8 +1998,8 @@
     ]
   },
   "skills+shared+voice+x+team+board": {
-    "bytes": 77936,
-    "sha256": "c054e63d25147b77c3de082557501f38ad613e2ffab1bc584f33476ba2f6ece7",
+    "bytes": 77873,
+    "sha256": "373b7a0607a9c47a0dbbb00433449d60b72d3d17d61352561fc7a2ab063c7778",
     "tools": [
       "tool_result_read",
       "list_shared_computers",
@@ -2076,8 +2076,8 @@
     ]
   },
   "default+room+board": {
-    "bytes": 63424,
-    "sha256": "d42aaf4367078759a4e49796ffa0677cd455850030239dfcdb4325a8550fb211",
+    "bytes": 63361,
+    "sha256": "b2ca3002e1272d9d000596830bc48540915bcf86caa3f513ea6b4394610de4eb",
     "tools": [
       "tool_result_read",
       "list_room_targets",

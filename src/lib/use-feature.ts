@@ -1,15 +1,14 @@
-import { panelsEnabled, skillBurgerEnabled, suggestedRepliesEnabled, teamBoardEnabled, threadTabsEnabled } from "@/lib/feature-flags";
+import { panelsEnabled, skillBurgerEnabled, suggestedRepliesEnabled, threadTabsEnabled } from "@/lib/feature-flags";
 import type { ConfigStatus } from "@/state/store";
 import { useStoreSelector } from "@/state/store-select";
 
 /** Switches on Settings → Features, kept in the place's config.json (`features.<name>`), so its server reads them too. */
-export type Feature = "skillBurger" | "panels" | "threadTabs" | "teamBoard" | "suggestedReplies";
+export type Feature = "skillBurger" | "panels" | "threadTabs" | "suggestedReplies";
 
 const FEATURES: Record<Feature, (config: ConfigStatus | null | undefined) => boolean> = {
   skillBurger: skillBurgerEnabled,
   panels: panelsEnabled,
   threadTabs: threadTabsEnabled,
-  teamBoard: teamBoardEnabled,
   suggestedReplies: suggestedRepliesEnabled,
 };
 

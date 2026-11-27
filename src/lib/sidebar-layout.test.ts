@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeBotsFirst,
+  departmentsIn,
   BOT_CHATS_SECTION_ID,
   BOTS_SECTION_ID,
   CHANNELS_SECTION_ID,
@@ -30,6 +31,7 @@ import {
   unreadSinceByBot,
   userSectionId,
   userSectionName,
+  withDepartmentOrder,
   withPrimaryTile,
   withUnreadSection,
 } from "./sidebar-layout";
@@ -488,5 +490,13 @@ describe("the Unread filter", () => {
     expect(unreadFilterOrder(order, new Map([["c", 10], ["b", 50]]))).toEqual(["c", "b"]);
     expect(unreadFilterOrder(order, new Map([["c", 10], ["b", 50]]), { id: "a", since: 30 })).toEqual(order);
     expect(unreadFilterOrder([], new Map(), null)).toEqual([]);
+  });
+});
+
+describe("the workspace's department order", () => {
+  it("fills the places departments hold with the workspace's order and leaves the rest alone", () => {
+    const ids = [userSectionId("Ops"), BOTS_SECTION_ID, userSectionId("Sales"), userSectionId("Local only")];
+    expect(withDepartmentOrder(ids, ["Sales", "Gone", "Ops"])).toEqual([userSectionId("Sales"), BOTS_SECTION_ID, userSectionId("Ops"), userSectionId("Local only")]);
+    expect(departmentsIn(ids)).toEqual(["Ops", "Sales", "Local only"]);
   });
 });
