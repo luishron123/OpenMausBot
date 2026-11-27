@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { failedTurnTool } from "../../shared/failed-turn.ts";
 import { nameIsCommand } from "../../shared/tool-name.ts";
-import type { RuntimeEvent, SteerLate, SteerOutcome } from "../contracts.ts";
+import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
 import { quoteInNote } from "../peer-provenance.ts";
 import { RepeatDetector, callKey, toolItemKey } from "../repeat-detector.ts";
 import { RepeatStreak, failureDigest } from "../repeat-streak.ts";
@@ -84,8 +84,7 @@ export interface LoopGuardDeps {
   waiting(threadId: string): boolean;
   /** The decision a person's own message gets in the running turn. */
   canSteer(threadId: string): boolean;
-  /** `late` hears the agent turn down a note it took: only logged, the turn runs on. */
-  steer(threadId: string, note: string, late: SteerLate): Promise<SteerOutcome>;
+  steer(threadId: string, note: string): Promise<SteerOutcome>;
   /** The person's Stop, for this cause; it writes its transcript rows before it returns. */
   interrupt(threadId: string, cause: string): Promise<unknown>;
   /** Never given the command: its text may hold a credential. */
@@ -177,7 +176,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
   const steer = (threadId: string, note: string, streak: number) => {
     // One attempt: an indeterminate or failed steer may have been delivered, and a second could land twice.
     try {
-      void Promise.resolve(deps.steer(threadId, note, { refused: () => log("steer refused late", threadId, streak) })).then(
+      void Promise.resolve(deps.steer(threadId, note)).then(
         (outcome) => log(outcome === "steered" ? "steer sent" : `steer ${outcome}`, threadId, streak),
         () => log("steer rejected", threadId, streak),
       );

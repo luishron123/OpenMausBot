@@ -50,7 +50,7 @@ import type {
   SendTurnInput,
   ProviderErrorCode,
   RequestOutcome,
-  SteerLate, TextGenerationOptions,
+  TextGenerationOptions,
   TurnImageInput,
 } from "../../contracts.ts";
 import { newEventId, newId, TurnNotStartedError } from "../../contracts.ts";
@@ -315,7 +315,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
   if (support.sessionScopedApproval && !support.configureSession) {
     throw new Error(`${support.displayName}: sessionScopedApproval needs configureSession to apply each turn's mode`);
   }
-  const DRIVER_KIND = support.driverKind, takesOver = Boolean(support.steer && "takeOver" in support.steer && support.steer.takeOver);
+  const DRIVER_KIND = support.driverKind;
   const SOURCE = support.nativeSource;
   const decodeConfig = decodeAcpConfig(support.defaultCli);
   const DENY_TIMEOUT_NOTE =
@@ -1032,7 +1032,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           flushAssistantText,
           receiveModelVariants,
           steering: support.steer && turnSteering(support.steer, {
-            open: () => state.promptSent && !state.settled && !state.stopped && !session.closing, asking: () => asks.size > 0,
+            open: () => state.promptSent && !state.settled && !state.stopped && !session.closing,
             commands: () => session.commands,
             initializeResult: () => session.initResult, env,
             prompt: (text) => request("session/prompt", { sessionId: session.sessionId, prompt: [{ type: "text", text }] }, undefined, undefined, promptIdleTimeoutMs()),
@@ -1303,7 +1303,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               );
             const harnessFailed = stderrFailureOf(session.host); if (harnessFailed) throw harnessFailed;
             const steersOut = current.steering?.promptAnswered();
-            if (steersOut && (!state.stopped || takesOver)) { current.flushAssistantText(); await steersOut; } // a taken-over steer's cancelled reply carries the usage
+            if (steersOut && !state.stopped) { current.flushAssistantText(); await steersOut; }
             const failure = state.failedChunk?.failure;
             // session/prompt resolving is the acceptance boundary: a rejected or reported-failed prompt leaves no receipt.
             if (pendingSplitReceipt && !failure) commitPromptSplitReceipt(DRIVER_KIND, pendingSplitReceipt, { compacted: state.usageCompacted, last: state.usageLast, peak: state.usagePeak });
@@ -1500,8 +1500,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           capabilities: acpCapabilities(support),
           sendTurn,
           interruptTurn: async (threadId) => active.get(threadId)?.interrupt(),
-          ...(support.steer ? { steer: async (threadId: string, text: string, images?: readonly TurnImageInput[], late?: SteerLate) =>
-            images?.length ? "refused" as const : await sessions.get(threadId)?.current?.steering?.steer(text, late) ?? "refused" } : {}),
+          ...(support.steer ? { steer: async (threadId: string, text: string, images?: readonly TurnImageInput[]) =>
+            images?.length ? "refused" as const : await sessions.get(threadId)?.current?.steering?.steer(text) ?? "refused" } : {}),
           respondToRequest: async (threadId, requestId, decision) => {
             const turn = active.get(threadId);
             const finish = turn?.asks.get(requestId);

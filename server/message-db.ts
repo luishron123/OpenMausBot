@@ -226,13 +226,15 @@ export interface ChatFollowup {
   payload: FollowupPayload;
 }
 
-/** A 202/cancel/dispatch claim must reach disk (FULL sync) before its result is published; nested, it joins the outer commit, at the outer write's sync. */
-export function writeFollowups(write: (connection: DatabaseSync) => void): void {
-  if (transactionDepth > 0) return transaction(write);
+/** A 202/cancel/dispatch claim must reach disk (FULL sync) before its result is published. */
+function writeFollowups(write: (connection: DatabaseSync) => void): void {
   const connection = db();
   connection.exec("PRAGMA synchronous = FULL");
-  try { transaction(write); }
-  finally { connection.exec("PRAGMA synchronous = NORMAL"); }
+  try {
+    connection.exec("BEGIN IMMEDIATE");
+    try { write(connection); connection.exec("COMMIT"); }
+    catch (error) { connection.exec("ROLLBACK"); throw error; }
+  } finally { connection.exec("PRAGMA synchronous = NORMAL"); }
 }
 
 export interface StoredCommandReceipt {
