@@ -5018,7 +5018,7 @@ bus.subscribe((event: RuntimeEvent) => {
       const text = event.ok ? reply || event.stopReason || "The bot finished without a text reply"
         : stoppedTurnText(event.threadId, event.turnId, undefined, event.stopReason);
       const stop = event.ok ? undefined : turnStops.read(event.threadId, event.turnId), handoffPath = stop?.handoffPath, failure = stop?.cause ?? stop?.error;
-      const outcome: DirectTurnOutcome = { ok: event.ok, text: unansweredApprovals.annotate(event.threadId, event.turnId, handoffReply(text).text, event.ok), ...approvalAsk(store.botByThread(event.threadId)?.id, event.threadId, event.turnId),
+      const summary = handoffReply(text), outcome: DirectTurnOutcome = { ok: event.ok, ...summary, text: unansweredApprovals.annotate(event.threadId, event.turnId, summary.text, event.ok), ...approvalAsk(store.botByThread(event.threadId)?.id, event.threadId, event.turnId),
         ...(handoffPath ? { cap: { note: STEP_CAP_NOTE, handoffPath } } : {}), ...(event.ok ? {} : { failure: { text: failure ?? "", stopReason: event.stopReason } }) };
       const owner = directFollowupTurns.complete(event.threadId, event.turnId, outcome);
       if (owner) {

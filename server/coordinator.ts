@@ -94,6 +94,8 @@ export interface BeginTurnRequest {
 export interface HostTurnResult {
   ok: boolean;
   text: string;
+  /** The reply's own length when `text` is a cut of it (handoffReply): the kept result reports its end as lost. */
+  chars?: number;
   evidence?: TurnEvidence;
   cap?: { note: string; handoffPath?: string };
   cards?: { question: string; ids: string[] };
