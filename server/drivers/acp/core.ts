@@ -208,7 +208,6 @@ export interface AcpSupport extends AcpDriverHooks {
   ownMcpOverHttp?: boolean | "advertised"; /** Under `ownMcpOverHttp: "advertised"`, whether an agent whose `initialize` advertises no MCP transport reaches MCP servers by URL anyway. */ takesUnadvertisedHttpMcp?(init: unknown): boolean; /** The agent's budget in bytes for all of a session's MCP tool definitions, by its `initialize` answer: OpenMausBot's own servers share it out. */ sessionToolBudget?(init: unknown): number | undefined;
   /** How many tools the agent lists of its own beside the MCP servers', counted against a provider's tool limit. */
   engineTools?: number;
- 
   /** The agent's own debug log, read while a prompt is quiet: a new line proves it alive and `parse`
    * picks what to tell the person. Null when this process keeps none. A `shared` log holds every session's
    * and process's lines, so its lines prove nothing about this turn and only `parse` reads them. */
@@ -590,7 +589,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               message: `${support.displayName} offered no "${want}" permission option — cancelling the request instead of guessing`,
             });
 
-          const toolCall = params.toolCall ?? {}, isQuestion = String(toolCall.toolCallId ?? "").startsWith("interaction_");
+          const toolCall = params.toolCall ?? {};
+          const isQuestion = String(toolCall.toolCallId ?? "").startsWith("interaction_");
           if ((support.allowsAlone?.(instanceId, current.turn, toolCall) || (current.turnConfig.fullAuto && current.turn.approvalMode === undefined)) && !isQuestion && acpAnswersAlone(toolCall.rawInput)) {
             const allow = optionFor("allow");
             if (!allow) missing("allow");
