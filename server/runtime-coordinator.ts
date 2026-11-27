@@ -6,7 +6,7 @@ import { composeEnvelope, composeQuestion, composeReport, composeResume, compose
 import { handoffLimits } from "./runtime/handoff-limits.ts";
 import { Runtime } from "./runtime/runtime.ts";
 import { importLegacyDelegations, importLegacyHandoffs, type LegacyThreadResolver } from "./runtime/import-legacy.ts";
-import { openRuntimeStore, type RuntimeStore } from "./runtime/store.ts";
+import { openRuntimeStore, RESULT_KEPT_MAX, type RuntimeStore } from "./runtime/store.ts";
 import { personOnly, requesterDecides, withDefault } from "./runtime/questions.ts";
 import { isStatusOnly, mayBeStatusOnly, statusReplyPrompt } from "./runtime/status-reply.ts";
 import { answersSender, childrenSince, clip, isTerminal, ownThread, path } from "./runtime/tree.ts";
@@ -91,6 +91,12 @@ export function needsInputQuestion(text: string): string | undefined {
   if (NOTHING_TO_ASK.has(value.replace(/[.!。！]+$/u, "").toLowerCase())) return undefined;
   const question = [value, ...lines.slice(at + 1)].join("\n").trim();
   return question || undefined;
+}
+
+/** The turn's reply whole, up to what the store keeps beside a record: the runtime keeps the record's head and the rest
+ * beside it, so a long report is never cut here. */
+export function handoffReply(text: string): Pick<HostTurnResult, "text"> {
+  return { text: text.slice(0, RESULT_KEPT_MAX) };
 }
 
 export function view(a: Assignment, parent?: Assignment): HandoffView {
@@ -336,6 +342,12 @@ export class RuntimeCoordinator implements Coordinator {
   status(id: string): StatusView | undefined {
     this.ready();
     return this.runtime.status(id);
+  }
+
+  /** Part of a result longer than its record holds, kept whole beside it. */
+  resultPart(id: string, offset: number, limit: number): ReturnType<RuntimeStore["resultPart"]> {
+    this.ready();
+    return this.store.resultPart(id, offset, limit);
   }
 
   job(threadId: string, since: number, botId?: string): { scopes: string[]; rows: Assignment[] } {

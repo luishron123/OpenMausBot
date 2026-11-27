@@ -24,7 +24,7 @@ import { LentComputers, provenRequestPerson, SharedComputers, sharedComputerOper
 import { cloudHomeLendingRefusal, cloudHomeOwnTurnRefusal, createCloudRoutineAuthors, ownerOnlyConversation } from "./cloud-lending.ts"; import { createOwnHome, oneOwner, selfHostedPersonName } from "./own-home.ts"; import { createPlacesElsewhere } from "./places-elsewhere.ts"; import { createPlacesElsewhereRoutes } from "./routes/places-elsewhere.ts"; import { assertRoomFolder } from "./room-folder.ts"; import { cloudConnectedAppsBrokerUrl, startCloudHomeConnectedApps, stopCloudHomeConnectedApps } from "./cloud-connected-apps.ts"; import { createTeamConnectionsHost } from "./host/team-connections-host.ts"; import { createCloudLendingTurns } from "./host/cloud-lending-turns.ts"; import { createTeamConnectionRoutes } from "./routes/team-connections.ts";
 import { botMemoryFiles, createLendingMemory } from "./lending-memory.ts";
 import { SharedComputerControl } from "./shared-computer-control.ts";
-import { STATUS_REPLY_TIMEOUT_MS } from "./runtime/status-reply.ts"; import { createCoordinator, sameTurnReturns, type ComposedTurn, type CoordinateBotsCall, type Coordinator, type HandoffOpener, type HandoffOptions, type HandoffView, type HostTurnResult } from "./coordinator.ts";
+import { STATUS_REPLY_TIMEOUT_MS } from "./runtime/status-reply.ts"; import { createCoordinator, sameTurnReturns, type ComposedTurn, type CoordinateBotsCall, type Coordinator, type HandoffOpener, type HandoffOptions, type HandoffView, type HostTurnResult } from "./coordinator.ts"; import { handoffReply } from "./runtime-coordinator.ts";
 import { queuedBehindPersonText, turnWaitedOnPerson, UnansweredApprovals } from "./waiting-on-person.ts";
 import { createPersonWaits } from "./host/person-waits.ts"; import { askToolName, createAskCards, settleRequestCard } from "./host/ask-cards.ts"; import { createQuestionRouting } from "./host/question-routing.ts"; import { handoffResultRef, noticeQuiet, stopHandedOn } from "./host/handoff-stop.ts"; import { besideBusy, workThreadFor } from "./host/work-thread.ts"; import { createHandedClose, reopenHandedThread, SYSTEM_STOP } from "./host/finished-work.ts"; import { leaveThreadPost, postToThread, threadWaitsOn, unreadThreadPosts } from "./host/thread-posts.ts"; import { anyCardLive, closedByStop, resumableCards as cardsWaitedOn } from "./host/resumable-cards.ts"; import { createMcpChat } from "./host/mcp-chat.ts"; import { isCardOwnerLive, isMcpSignInCard } from "./host/mcp-sign-in-cards.ts"; import { createConnectCardSettle } from "./host/connect-card-settle.ts";
 import { assertRequestTarget, guardedRequestPath, requestConflict, requestNeedsInput } from "./guarded-requests.ts";
@@ -70,7 +70,7 @@ import {
   messageAttachmentName,
   messageFileRoots,
 } from "./message-file.ts";
-import { avatarImageStatus } from "./avatar-image.ts"; import { assignmentReadRefusal } from "./assignment-read.ts";
+import { avatarImageStatus } from "./avatar-image.ts"; import { assignmentReadRefusal, assignmentResultPart } from "./assignment-read.ts";
 import { imageGenerationReady } from "./image-generation.ts"; import { configureHiggsfield, createHiggsfieldBackend } from "./higgsfield-mcp.ts";
 import { createImageToolRoutes } from "./routes/image-tools.ts"; import { createMeetingsHost } from "./host/meetings-host.ts"; import { meetingsUnavailablePrompt } from "./meetings/prompt.ts";
 import { createImageSettingsRoutes } from "./routes/image-settings.ts";
@@ -5018,7 +5018,7 @@ bus.subscribe((event: RuntimeEvent) => {
       const text = event.ok ? reply || event.stopReason || "The bot finished without a text reply"
         : stoppedTurnText(event.threadId, event.turnId, undefined, event.stopReason);
       const stop = event.ok ? undefined : turnStops.read(event.threadId, event.turnId), handoffPath = stop?.handoffPath, failure = stop?.cause ?? stop?.error;
-      const outcome: DirectTurnOutcome = { ok: event.ok, text: unansweredApprovals.annotate(event.threadId, event.turnId, text.slice(0, 12_000), event.ok), ...approvalAsk(store.botByThread(event.threadId)?.id, event.threadId, event.turnId),
+      const outcome: DirectTurnOutcome = { ok: event.ok, text: unansweredApprovals.annotate(event.threadId, event.turnId, handoffReply(text).text, event.ok), ...approvalAsk(store.botByThread(event.threadId)?.id, event.threadId, event.turnId),
         ...(handoffPath ? { cap: { note: STEP_CAP_NOTE, handoffPath } } : {}), ...(event.ok ? {} : { failure: { text: failure ?? "", stopReason: event.stopReason } }) };
       const owner = directFollowupTurns.complete(event.threadId, event.turnId, outcome);
       if (owner) {
@@ -13662,7 +13662,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
               for (const lane of lanes.values()) coordinator.poll(lane);
             }
             const current = coordinator.status(id) ?? status;
-            return json(res, 200, { assignment: shape(current.assignment), children: current.children.map(shape), inbox: current.inbox, ...(sentHere ? {} : { sentElsewhere: true }) });
+            return json(res, 200, { assignment: { ...shape(current.assignment), ...assignmentResultPart(current.assignment, url.searchParams.get("offset"), (...part) => coordinator.resultPart(...part)) }, children: current.children.map(shape), inbox: current.inbox, ...(sentHere ? {} : { sentElsewhere: true }) });
           }
           await new Promise((wake) => setTimeout(wake, 500));
         }
