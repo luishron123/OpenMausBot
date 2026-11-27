@@ -31,7 +31,7 @@ import { anySidePanel, botPanelFloats, panelsMovingSidebar, sidebarFoldsForPanel
 import { preloadConnectedApps } from "@/lib/connected-apps";
 import {
   ActivityPanel, AnnouncementsPage, BotSettingsDialog, CloudAddDialog, ComputerPanel, FilesView, InboxPanel, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
-  PluginsPanel, preloadScreens, PublishedAppsPage, RemoteAgentSettingsPanel, SkillBurgersPage, RemoteDesktopPanel, RoomPanel, SettingsModal, TeamFilesPage, TeamMapPage, TriggersPage,
+  PanelsPage, PluginsPanel, preloadScreens, PublishedAppsPage, RemoteAgentSettingsPanel, SkillBurgersPage, RemoteDesktopPanel, RoomPanel, SettingsModal, TeamFilesPage, TeamMapPage, TriggersPage,
 } from "@/components/lazy-screens";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { closeRoomPanel, useRoomPanelShown } from "@/lib/room-panel";
@@ -101,6 +101,7 @@ import { WebPanelPage } from "@/components/WebPanelPage";
 import { AppPreviewPanel } from "@/components/published-apps/AppPreviewPanel";
 import { FilePreviewPanel } from "@/components/FilePreviewPanel";
 import { refreshPublishedApps } from "@/lib/own-published-apps";
+import { startAppSounds } from "@/lib/app-sounds";
 import { serverFetch } from "@/lib/relay-server";
 import { replaceUrl } from "@/lib/replace-url";
 
@@ -110,7 +111,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   const needsYou = needsYouVersion(state.bots, state.groups, state.notifications);
   useTeamPeopleLoader(state.config, needsYou);
   useInboxLoader(`${inboxVersion(state.bots) ?? ""}|${needsYou}`);
-  useEffect(() => { refreshPublishedApps(); }, []);
+  useEffect(() => { refreshPublishedApps(); startAppSounds(); }, []);
   const inboxReady = useInboxReady();
   const inboxPanel = useInboxPanel();
   const inboxShown = inboxPanel.open && inboxReady;
@@ -190,7 +191,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
     view: state.activeView, pluginsOpen: state.pluginsOpen, settingsOpen: state.settingsOpen });
   const closeDrawer = useCallback(() => { hideDrawer(); menuButtonRef.current?.focus(); }, [hideDrawer]);
   const notificationFeed = useNotificationFeed() && !remoteClient;
-  const advanced = useAdvancedMode(), skillBurger = useFeature("skillBurger"), roomFeed = useRoomFeed(group);
+  const advanced = useAdvancedMode(), skillBurger = useFeature("skillBurger"), panels = useFeature("panels"), roomFeed = useRoomFeed(group);
   // A thread opened from a room's feed sits beside it while both fit, and takes the feed's place when they don't.
   const feedThreadFull = useFeedThreadFull(group && roomFeed && sidebarInline && state.forkPanel?.kind === "group" && state.forkPanel.ownerId === group.id ? state.forkPanel.threadId : null);
   const roomPanelOpen = useRoomPanelShown({ group, state, simple: !advanced && !remoteClient });
@@ -443,6 +444,8 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
         <WebPanelPage />
       ) : state.activeView === "skill-burgers" && skillBurger ? (
         <SkillBurgersPage />
+      ) : state.activeView === "panels" && panels ? (
+        <PanelsPage />
       ) : state.activeView === "published-apps" ? (
         <PublishedAppsPage />
       ) : state.activeView === "announcements" ? (

@@ -24,6 +24,7 @@ import {
   antigravityCliToolBudget,
   antigravityClientInfo,
   antigravityLaunchArgs,
+  ANTIGRAVITY_STEER,
   antigravityProfileAuthenticated,
   antigravityProfileDirectory,
   antigravitySessionSetup,
@@ -190,6 +191,8 @@ const support: AcpSupport = {
   },
   images: true,
   mediaLinks: true,
+  // A session the pinned runtime or a CLI before 1.5.0 serves refuses each steer, which queues the message.
+  steer: ANTIGRAVITY_STEER,
   spawnArgs: () => [],
   selectModel: { configId: "model" },
   modelVariants: true,

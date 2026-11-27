@@ -2,15 +2,12 @@ import { Plus } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { useStoreDispatch } from "@/state/store-select";
-import { useAdvancedMode } from "@/lib/interface-mode";
-import { useBotHasThreads, useThreadTabsShown } from "./HeaderThreadTabs";
+import { useThreadTabsShown } from "./HeaderThreadTabs";
+import { ELEVATED_FLOAT, ELEVATED_HOVER } from "./elevated";
 
 export function NewThreadHeaderButton({ botId }: { botId: string }) {
   const dispatch = useStoreDispatch();
   const tabs = useThreadTabsShown();
-  const simplePill = !useAdvancedMode() && window.ogb?.remoteClient?.active !== true;
-  const pillHasIt = useBotHasThreads(botId) && simplePill;
-  if (pillHasIt) return null;
   return (
     <button
       type="button"
@@ -19,7 +16,7 @@ export function NewThreadHeaderButton({ botId }: { botId: string }) {
       aria-label={t("task.newShort")}
       aria-keyshortcuts="Meta+T Control+T"
       title={t("task.newShort")}
-      className={cn(tabs && "md:hidden", "flex size-9 shrink-0 items-center justify-center rounded-full text-ink-secondary transition-colors duration-[120ms] hover:bg-ink/[0.06] hover:text-ink active:bg-ink/[0.08] motion-reduce:transition-none")}
+      className={cn(tabs && "md:hidden", "flex size-9 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:text-ink", ELEVATED_FLOAT, ELEVATED_HOVER)}
     >
       <Plus size={16} aria-hidden="true" />
     </button>

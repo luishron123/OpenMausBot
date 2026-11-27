@@ -156,3 +156,50 @@ describe("same_conversation in the trigger tool", () => {
     expect(refused.calls).toEqual([]);
   });
 });
+
+describe("panel_id in the trigger tool", () => {
+  const daily = { type: "daily", time: "09:00" };
+
+  it("checks the panel, creates the schedule, then links it by the new trigger id", async () => {
+    const { calls, context: ctx } = context();
+    const result = await callTool("trigger", { action: "create", when: "schedule", name: "Sales", instructions: "Count.", schedule: daily, panel_id: "daily-sales", card_key: "revenue" }, ctx);
+    expect(result.isError).toBeUndefined();
+    expect(calls.map((call) => call.path)).toEqual(["/api/internal/panels/link", "/api/internal/trigger-requests", "/api/internal/panels/link"]);
+    expect(calls[0]!.body).toEqual({ panel_id: "daily-sales", card_key: "revenue" });
+    expect(calls[1]!.body).not.toHaveProperty("routine.panelId");
+    expect(calls[2]!.body).toEqual({ panel_id: "daily-sales", card_key: "revenue", routine_id: "t-1" });
+  });
+
+  it("links the panel when the new trigger id comes back under result", async () => {
+    const { calls, context: ctx } = context({ response: { ok: true, status: 201, body: { applied: true, result: { resultId: "t-9" }, summary: "Every day at 9:00, Scout follows: Count." } } });
+    const result = await callTool("trigger", { action: "create", when: "schedule", name: "Sales", instructions: "Count.", schedule: daily, panel_id: "daily-sales", card_key: "revenue" }, ctx);
+    expect(result.isError).toBeUndefined();
+    expect(result.text).toContain("(trigger id t-9)");
+    expect(result.text).not.toContain("did not apply");
+    expect(calls.map((call) => call.path)).toEqual(["/api/internal/panels/link", "/api/internal/trigger-requests", "/api/internal/panels/link"]);
+    expect(calls[2]!.body).toEqual({ panel_id: "daily-sales", card_key: "revenue", routine_id: "t-9" });
+  });
+
+  it("links or unlinks on update without a trigger request when nothing else changes", async () => {
+    const { calls, context: ctx } = context();
+    await callTool("trigger", { action: "update", trigger_id: "t-1", panel_id: "" }, ctx);
+    expect(calls).toEqual([{ path: "/api/internal/panels/link", body: { panel_id: "", routine_id: "t-1" } }]);
+    await callTool("trigger", { action: "update", trigger_id: "t-1", name: "Renamed", panel_id: "pnl_1" }, ctx);
+    expect(calls.slice(1).map((call) => call.path)).toEqual(["/api/internal/trigger-requests", "/api/internal/panels/link"]);
+  });
+
+  it("stops before creating anything when the panel is missing, and refuses it where it cannot apply", async () => {
+    const missing = context({ response: { ok: false, status: 404, body: { error: "No panel nope. Call list_panels for the ids, or create_panel first." } } });
+    const result = await callTool("trigger", { action: "create", when: "schedule", name: "A", instructions: "B", schedule: daily, panel_id: "nope" }, missing.context);
+    expect(result).toEqual({ text: "The panel link did not apply: No panel nope. Call list_panels for the ids, or create_panel first.", isError: true });
+    expect(missing.calls).toHaveLength(1);
+
+    const refused = context();
+    const text = async (args: Record<string, unknown>) => (await callTool("trigger", args, refused.context)).text;
+    expect(await text({ action: "create", when: "webhook", name: "A", instructions: "B", panel_id: "p" })).toBe("panel_id applies only to when=schedule or when=limit_reset.");
+    expect(await text({ action: "create", when: "schedule", name: "A", instructions: "B", schedule: daily, card_key: "x" })).toContain("card_key needs panel_id");
+    expect(await text({ action: "pause", trigger_id: "t-1", panel_id: "p" })).toBe("panel_id and card_key change with action=update.");
+    expect(await text({ action: "update", trigger_id: "t-1", panel_id: "p", for_bot_id: "helper" })).toContain("only your own automation");
+    expect(refused.calls).toEqual([]);
+  });
+});

@@ -9,6 +9,7 @@ import { SettingRow, SettingsGroup, SettingsRows, Switch } from "../../SettingsP
 const COPY: Record<Feature, { title: LocaleKey; line: LocaleKey }> = {
   skillBurger: { title: "settings.features.skillBurger", line: "settings.features.skillBurgerLine" },
   threadTabs: { title: "settings.features.threadTabs", line: "settings.features.threadTabsLine" },
+  panels: { title: "settings.features.panels", line: "settings.features.panelsLine" },
   teamBoard: { title: "settings.features.teamBoard", line: "settings.features.teamBoardLine" },
   suggestedReplies: { title: "settings.features.suggestedReplies", line: "settings.features.suggestedRepliesLine" },
 };
@@ -49,6 +50,7 @@ export function FeaturesPage() {
       <SettingsRows>
         <FeatureRow name="skillBurger" />
         <FeatureRow name="threadTabs" />
+        <FeatureRow name="panels" />
         <FeatureRow name="suggestedReplies" />
         <FeatureRow name="teamBoard" />
       </SettingsRows>

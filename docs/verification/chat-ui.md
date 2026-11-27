@@ -301,6 +301,43 @@ The advisory renderer job runs both recipes. Runtime mounting, direct/channel
 turns, busy-state rejection and revoked-session imports are separately exercised
 by `server/mcp-selection.e2e.test.ts` against disposable fake-engine servers.
 
+## Panels
+
+**Panels** sits directly above **Automations** in the sidebar's places, the
+account menu's tools and the phone bar, and leaves all three while
+`features.panels` is `false` (it is on when unset). It opens the list of
+panels: "Cards your bots keep up to date.", one row per panel with its bot,
+card count, last update and a red dot when a card failed. A row opens the
+panel: its about line, maker, last update, one line per automation linked to
+it ("Updated by the automation Morning numbers · next today 9:00 AM",
+**Refresh now**, and "The last run didn't update the panel" when that run set
+nothing), then the cards in one, two or four columns by the page's own width.
+A card shows its widget read-only, "12 min ago · Scout" under it, and its
+state as `data-panel-card-state`: `ok`, `updating` (an automation of the
+panel is running), `failed` (the last data dimmed, the reason in red) or
+`waiting` (no data yet). Its ⋯ menu sets the size (S, M, L) and removes it with
+an Undo; the panel's ⋯ menu renames it, opens the bot's conversation and
+deletes it, with an Undo on the list.
+
+With a server that has the panel routes (`server/panels/routes.ts`), launch as in
+[Launch](#launch), ask Pepper for a panel, then:
+
+```sh
+pnpm control:omb ui click --ui $H --name "Panels"
+pnpm control:omb ui snapshot --ui $H --interactive
+pnpm control:omb ui flag --ui $H --set features.panels=false
+pnpm control:omb ui snapshot --ui $H --interactive
+```
+
+Expected: the first snapshot has `button "Panels"` right before
+`button "Automations"` and the `main "Panels"` landmark; after the flag, no
+`Panels` button. Without the routes, the page's own states are covered by
+the stand-in server of the DOM tests:
+
+```sh
+pnpm exec vitest run src/components/panels/
+```
+
 ## Cleanup
 
 Interrupt `ui launch` with Ctrl-C. It closes the browser session (waiting

@@ -33,7 +33,7 @@ import type { ValueKind } from "./value-ledger.ts";
 export { WATCH_INSTRUCTIONS, WATCH_NAME } from "./default-watch.ts";
 export const WATCH_FILE = "watch.json";
 /** The engines whose every tool use outside a run's allowlist reaches OpenMausBot's answerer and is refused there. */
-const FENCED_ENGINES = new Set(["claudeAgent"]);
+export const FENCED_ENGINES: ReadonlySet<string> = new Set(["claudeAgent"]);
 const READ_SLUG: Record<ReadApp, string> = { gmail: "GMAIL_FETCH_EMAILS", outlook: OUTLOOK_LIST_TOOL, googlecalendar: "GOOGLECALENDAR_EVENTS_LIST" };
 const ACTIVE = new Set(["queued", "running", "waiting"]);
 const MAX_HANDED = 50;
@@ -87,6 +87,7 @@ export interface ProactiveDeps {
   counted?(kind: ValueKind, count: number): void;
   /** A new Cloud's first look, confined like a read-and-draft run. */
   look?: ReadAndDraftDeps["look"];
+  mayReach?: ReadAndDraftDeps["mayReach"];
   morning?: MorningDeps;
 }
 
@@ -186,7 +187,7 @@ export function createProactive(deps: ProactiveDeps) {
     adapter: (instanceId) => deps.registry.get(instanceId)?.adapter,
     stale: deps.stale, decide: deps.decide, release: deps.release,
     mayDraft: checks.mayDraft, drafted: checks.drafted,
-    ...(deps.look ? { look: deps.look } : {}),
+    ...(deps.look ? { look: deps.look } : {}), ...(deps.mayReach ? { mayReach: deps.mayReach } : {}),
     wroteDrafts: (botId, count) => { if (botId === owner()?.id) deps.counted?.("drafted", count); },
   });
 

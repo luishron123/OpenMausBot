@@ -3,11 +3,14 @@ import { threadCycleStep } from "@/lib/keyboard-shortcuts";
 import { newChatThreadId } from "@/state/new-chat";
 import type { AppState } from "@/state/store";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
+import { mainThreadFirst } from "./SidebarThreadRow";
 import { openTabId, threadTabs, type TabsBot } from "./thread-tabs";
 
 interface CycleTarget { botId: string; open: string; order: string[] }
 
-export const threadCycleOrder = (bot: TabsBot): string[] => threadTabs(bot).filter((tab) => !tab.draft).map((tab) => tab.threadId);
+/** The pill's order: the main thread first, then the rest as the tabs list them. */
+export const threadCycleOrder = (bot: TabsBot): string[] =>
+  mainThreadFirst(threadTabs(bot).filter((tab) => !tab.draft), bot.mainThreadId).map((tab) => tab.threadId);
 
 export function nextCycleThread(order: readonly string[], open: string, step: 1 | -1): string | null {
   const at = order.indexOf(open);

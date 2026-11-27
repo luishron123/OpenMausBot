@@ -79,7 +79,7 @@ describe("what the chat's own session reads", () => {
 });
 
 /** A real Store; the routine runs live in a stand-in for the RoutineManager, which keeps their report states. */
-function fixture(options: { threadLanguage?: (threadId: string) => string | undefined; notes?: Map<string, string> } = {}) {
+function fixture(options: { threadLanguage?: (threadId: string) => string | undefined; notes?: Map<string, string>; quiet?: (run: RoutineRun) => boolean } = {}) {
   const store = new Store(selection);
   const bot = store.createBot({ name: "Pepper" });
   const main = bot.threadId;
@@ -108,6 +108,7 @@ function fixture(options: { threadLanguage?: (threadId: string) => string | unde
     wrote: (_bot: BotRecord, threadId) => wrote.push(threadId),
     notify: (kind, _bot, threadId, detail, run) => { notified.push({ kind, threadId, detail }); notifiedRuns.push(run.id); },
     ...(options.threadLanguage ? { threadLanguage: options.threadLanguage } : {}),
+    ...(options.quiet ? { quiet: options.quiet } : {}),
     ...(options.notes ? { notes: { has: (runId: string) => options.notes!.has(runId), take: (runId: string) => { const note = options.notes!.get(runId) ?? null; options.notes!.delete(runId); return note; } } } : {}),
   });
   const reports = create();
@@ -156,6 +157,19 @@ describe("automation reports", () => {
     expect(f.notified).toEqual([{ kind: "done", threadId: f.main, detail: "Inbox brief: Acme replied about the order." }]);
     expect(f.notifiedRuns, "the notice knows which run it reports on").toEqual([run.id]);
     expect(f.store.messagesFor(f.main).some((message) => message.kind === "routine.run")).toBe(false);
+  });
+
+  it("writes nothing into any chat for a run whose answer goes elsewhere, and still speaks for its failure", () => {
+    const f = fixture({ quiet: (run) => run.routineId === "routine-Card update" });
+    const run = f.finished("Revenue is $4,210.", "Card update");
+    f.reports.runSettled(run, `turn-${run.id}`);
+    expect(f.added()).toEqual([]);
+    expect(f.notified).toEqual([]);
+    expect(f.runs.get(run.id)!.report).toEqual({ state: "quiet" });
+    const failed = f.finished(null, "Card update", { status: "failed", error: "engine" });
+    expect([f.reports.quiet(failed), f.reports.speaksFor(failed)]).toEqual([true, true]);
+    const other = f.finished("Acme replied.");
+    expect(f.reports.quiet(other)).toBe(false);
   });
 
   it("ends the person's own unread mark on the chat with a report, and keeps it through a run with nothing new", () => {

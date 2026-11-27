@@ -50,7 +50,7 @@ import type {
   SendTurnInput,
   ProviderErrorCode,
   RequestOutcome,
-  TextGenerationOptions,
+  SteerLate, TextGenerationOptions,
   TurnImageInput,
 } from "../../contracts.ts";
 import { newEventId, newId, TurnNotStartedError } from "../../contracts.ts";
@@ -208,6 +208,7 @@ export interface AcpSupport extends AcpDriverHooks {
   ownMcpOverHttp?: boolean | "advertised"; /** Under `ownMcpOverHttp: "advertised"`, whether an agent whose `initialize` advertises no MCP transport reaches MCP servers by URL anyway. */ takesUnadvertisedHttpMcp?(init: unknown): boolean; /** The agent's budget in bytes for all of a session's MCP tool definitions, by its `initialize` answer: OpenMausBot's own servers share it out. */ sessionToolBudget?(init: unknown): number | undefined;
   /** How many tools the agent lists of its own beside the MCP servers', counted against a provider's tool limit. */
   engineTools?: number;
+ 
   /** The agent's own debug log, read while a prompt is quiet: a new line proves it alive and `parse`
    * picks what to tell the person. Null when this process keeps none. A `shared` log holds every session's
    * and process's lines, so its lines prove nothing about this turn and only `parse` reads them. */
@@ -314,7 +315,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
   if (support.sessionScopedApproval && !support.configureSession) {
     throw new Error(`${support.displayName}: sessionScopedApproval needs configureSession to apply each turn's mode`);
   }
-  const DRIVER_KIND = support.driverKind;
+  const DRIVER_KIND = support.driverKind, takesOver = Boolean(support.steer && "takeOver" in support.steer && support.steer.takeOver);
   const SOURCE = support.nativeSource;
   const decodeConfig = decodeAcpConfig(support.defaultCli);
   const DENY_TIMEOUT_NOTE =
@@ -589,8 +590,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               message: `${support.displayName} offered no "${want}" permission option — cancelling the request instead of guessing`,
             });
 
-          const toolCall = params.toolCall ?? {};
-          const isQuestion = String(toolCall.toolCallId ?? "").startsWith("interaction_");
+          const toolCall = params.toolCall ?? {}, isQuestion = String(toolCall.toolCallId ?? "").startsWith("interaction_");
           if ((support.allowsAlone?.(instanceId, current.turn, toolCall) || (current.turnConfig.fullAuto && current.turn.approvalMode === undefined)) && !isQuestion && acpAnswersAlone(toolCall.rawInput)) {
             const allow = optionFor("allow");
             if (!allow) missing("allow");
@@ -1032,7 +1032,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           flushAssistantText,
           receiveModelVariants,
           steering: support.steer && turnSteering(support.steer, {
-            open: () => state.promptSent && !state.settled && !state.stopped && !session.closing,
+            open: () => state.promptSent && !state.settled && !state.stopped && !session.closing, asking: () => asks.size > 0,
             commands: () => session.commands,
             initializeResult: () => session.initResult, env,
             prompt: (text) => request("session/prompt", { sessionId: session.sessionId, prompt: [{ type: "text", text }] }, undefined, undefined, promptIdleTimeoutMs()),
@@ -1303,7 +1303,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               );
             const harnessFailed = stderrFailureOf(session.host); if (harnessFailed) throw harnessFailed;
             const steersOut = current.steering?.promptAnswered();
-            if (steersOut && !state.stopped) { current.flushAssistantText(); await steersOut; }
+            if (steersOut && (!state.stopped || takesOver)) { current.flushAssistantText(); await steersOut; } // a taken-over steer's cancelled reply carries the usage
             const failure = state.failedChunk?.failure;
             // session/prompt resolving is the acceptance boundary: a rejected or reported-failed prompt leaves no receipt.
             if (pendingSplitReceipt && !failure) commitPromptSplitReceipt(DRIVER_KIND, pendingSplitReceipt, { compacted: state.usageCompacted, last: state.usageLast, peak: state.usagePeak });
@@ -1500,8 +1500,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           capabilities: acpCapabilities(support),
           sendTurn,
           interruptTurn: async (threadId) => active.get(threadId)?.interrupt(),
-          ...(support.steer ? { steer: async (threadId: string, text: string, images?: readonly TurnImageInput[]) =>
-            images?.length ? "refused" as const : await sessions.get(threadId)?.current?.steering?.steer(text) ?? "refused" } : {}),
+          ...(support.steer ? { steer: async (threadId: string, text: string, images?: readonly TurnImageInput[], late?: SteerLate) =>
+            images?.length ? "refused" as const : await sessions.get(threadId)?.current?.steering?.steer(text, late) ?? "refused" } : {}),
           respondToRequest: async (threadId, requestId, decision) => {
             const turn = active.get(threadId);
             const finish = turn?.asks.get(requestId);

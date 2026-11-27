@@ -657,6 +657,10 @@ describe("agents-proxy MCP surface", () => {
       "set_main_thread",
       "run_workflow",
       "workflow_edit",
+      "list_panels",
+      "create_panel",
+      "set_panel_widget",
+      "update_panel_widget",
       "start_thread",
       "burst",
       "list_models",
@@ -709,7 +713,7 @@ describe("agents-proxy MCP surface", () => {
     expect(coordinate.description).toContain("Never target whoever assigned you this work or anyone above it");
     expect(coordinate.inputSchema.properties.reply.description).toContain("one-way notice");
     expect(coordinate.inputSchema.properties.consult.description).toContain("acting on nothing");
-    expect(Object.keys(coordinate.inputSchema.properties)).toEqual(["group_id", "bot_ids", "message", "reason", "rework", "thread", "title", "in_my_folder", "reply", "consult", "done_when", "answers", "files"]);
+    expect(Object.keys(coordinate.inputSchema.properties)).toEqual(["group_id", "bot_ids", "message", "reason", "rework", "thread", "title", "in_my_folder", "reply", "consult", "done_when", "answers", "stop", "files"]);
     expect(coordinate.inputSchema.properties.thread).toEqual({ type: "string", description: expect.stringContaining("new (its own history and run)") });
     expect(coordinate.inputSchema.properties.reply.enum).toEqual(["resume", "none"]);
     expect(coordinate.inputSchema.properties.consult.type).toBe("boolean");
@@ -2520,7 +2524,7 @@ describe("coordinate_bots arguments", () => {
       lastCoordinateBody = null;
       const res = await callTool("coordinate_bots", args);
       expect(res.result.isError, JSON.stringify(args)).toBe(true);
-      expect(res.result.content[0].text).toContain('thread ("standing", "new" or the id of a thread you opened on that teammate), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false), done_when, answers and files (an array of at most 5 file paths) are optional');
+      expect(res.result.content[0].text).toContain('thread ("standing", "new" or the id of a thread you opened on that teammate), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false), done_when, answers, stop (an assignment id you handed on, to stop it) and files (an array of at most 5 file paths) are optional');
       expect(lastCoordinateBody).toBeNull();
     }
   });

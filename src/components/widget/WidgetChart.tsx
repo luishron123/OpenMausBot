@@ -42,6 +42,9 @@ export function WidgetChart({ node }: { node: WidgetNode }) {
       const result = await embed(target, { ...spec, ...size.current } as Parameters<typeof embed>[1], { actions: false, ast: true, config: vegaConfig(theme) });
       if (!alive) { result.finalize(); return; }
       drawn.current = result;
+      // The card may have been measured while the chart was being drawn.
+      const { width: now, height: tall } = size.current;
+      if (result.view.width() !== now) void result.view.width(now).height(tall).resize().runAsync().catch(() => undefined);
     })().catch((cause) => {
       if (alive) setFailed(cause instanceof Error ? cause.message : String(cause));
     });

@@ -25,6 +25,8 @@ import {
   sidebarBotRows,
   nextUnreadHold,
   unreadBotsApart,
+  unreadFilterOrder,
+  unreadFilterSince,
   unreadSinceByBot,
   userSectionId,
   userSectionName,
@@ -360,6 +362,18 @@ describe("the unread section", () => {
     expect(parts.unsectionedBots).toHaveLength(3);
   });
 
+  it("lists a read bot waiting on the person with the unread ones, first, counts it, and leaves it out of what a drag arranges", () => {
+    const saved = { pinnedBots: [], sectionChiefs: [], sectionedBots: [read("w1"), read("asker")], unsectionedBots: [{ id: "u", unread: true, messages: [{ at: 99 }] }, read("b")] };
+    const waiting = (bot: { id: string }) => bot.id === "asker";
+    const rows = sidebarBotRows(saved, () => false, true, null, waiting);
+    const ids = (bots: { id: string }[]) => bots.map((bot) => bot.id);
+    expect(ids(rows.unreadBots)).toEqual(["asker", "u"]);
+    expect(rows.unreadCount).toBe(2);
+    expect([ids(rows.sectionedBots), ids(rows.inPlace.sectionedBots)]).toEqual([["w1"], ["w1"]]);
+    expect(ids(sidebarBotRows(saved, () => false, true).unreadBots)).toEqual(["u"]);
+    expect(ids(sidebarBotRows(saved, () => false, false, null, waiting).sectionedBots)).toEqual(["w1", "asker"]);
+  });
+
   it("counts a bot unread exactly as its row's dot does: a routine run or an archived conversation does not", () => {
     const parts = {
       sectionChiefs: [],
@@ -459,5 +473,32 @@ describe("the unread section", () => {
     expect(withUnreadSection([], true)).toEqual([UNREAD_SECTION_ID]);
     expect(withUnreadSection([BOTS_SECTION_ID], false)).toEqual([BOTS_SECTION_ID]);
     expect(sidebarSectionLabel(UNREAD_SECTION_ID)).toBe("Unread");
+  });
+});
+
+describe("the Unread filter", () => {
+  const bots = [
+    { id: "a", unread: true, messages: [{ at: 30 }] },
+    { id: "b", unread: false, messages: [{ at: 50 }] },
+    { id: "c", unread: false, activity: "waiting-on-you", messages: [{ at: 10 }] },
+    { id: "d", unread: true, tasks: [{ unread: true, routineRunId: "r", updatedAt: 90 }] },
+  ];
+  const waiting = (bot: { activity?: string }) => bot.activity === "waiting-on-you";
+
+  it("lists bots showing unread and bots waiting on the person, as their dots do", () => {
+    expect([...unreadFilterSince(bots, waiting)]).toEqual([["a", 30], ["c", 10]]);
+  });
+
+  it("opens oldest first and adds each newcomer at the end without moving the rest", () => {
+    const first = unreadFilterOrder([], new Map([["a", 30], ["c", 10]]));
+    expect(first).toEqual(["c", "a"]);
+    expect(unreadFilterOrder(first, new Map([["a", 99], ["b", 5], ["c", 10]]))).toEqual(["c", "a", "b"]);
+  });
+
+  it("drops a read bot, except the one held open, which keeps its place", () => {
+    const order = ["c", "a", "b"];
+    expect(unreadFilterOrder(order, new Map([["c", 10], ["b", 50]]))).toEqual(["c", "b"]);
+    expect(unreadFilterOrder(order, new Map([["c", 10], ["b", 50]]), { id: "a", since: 30 })).toEqual(order);
+    expect(unreadFilterOrder([], new Map(), null)).toEqual([]);
   });
 });

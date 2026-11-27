@@ -14,6 +14,7 @@ import { THREAD_POST_TOOL_DEFINITION } from "./agents-thread-post-tool.ts";
 import { RENAME_THREAD_TOOL_DEFINITION } from "./agents-thread-title-tool.ts";
 import { SET_MAIN_THREAD_TOOL_DEFINITION } from "./agents-main-thread-tool.ts";
 import { WORKFLOW_TOOL_DEFINITIONS, WORKFLOW_TOOL_NAMES } from "./agents-workflow-tool.ts";
+import { PANEL_TOOL_DEFINITIONS, PANEL_TOOL_NAMES } from "./agents-panel-tools.ts";
 import { WAIT_TOOL_DEFINITIONS, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts"; import { CHECK_BACK_TOOL_DEFINITIONS, CHECK_BACK_TOOL_NAMES } from "./agents-check-back-tool.ts"; import { BOARD_TOOL_DEFINITIONS, BOARD_TOOL_NAMES } from "./agents-board-tools.ts";
 import { COMPUTER_ASK_TOOL_DEFINITIONS, COMPUTER_ASK_TOOL_NAMES } from "./agents-computer-ask-tool.ts";
 import { IMAGE_TOOL_DEFINITIONS, IMAGE_TOOL_NAMES } from "./agents-image-tools.ts";
@@ -106,6 +107,8 @@ const TRIGGER_FIELDS_SCHEMA = {
   timeout_minutes: { type: "integer", minimum: 5, maximum: 240, description: "Schedules: optional limit on a run, 5 to 240." },
   clear_timeout: { type: "boolean", description: "Update: true removes the limit." },
   same_conversation: { type: "boolean", description: "app_event, webhook or schedule: each run continues the last run's conversation." },
+  panel_id: { type: "string", description: "Schedules: the panel (id or key) its runs keep current instead of reporting in chat; \"\" unlinks." },
+  card_key: { type: "string", description: "With panel_id: its own card's key." },
   continuity: { type: "boolean", description: "Schedules: each run gets the last run's report." },
   overlap: { type: "string", enum: ["skip", "queue"], description: "Schedules: while a run works, skip (default) or queue one." },
   run_on_startup: { type: "boolean", description: "Repeating schedules: also run when OpenMausBot starts." },
@@ -188,6 +191,7 @@ const TOOL_DEFINITIONS = [
       consult: { type: "boolean", description: "True for a question answered from what they know, acting on nothing." },
       done_when: { type: "string", maxLength: 1000, description: "What must be true to count as done; the teammate is held to it." },
       answers: { type: "string", description: "Only to answer a teammate's question: the assignment id its note names; message is the answer." },
+      stop: { type: "string", description: "Stop work you handed on now, a running command included: its requestId; say why in message." },
       files: { type: "array", items: { type: "string" }, maxItems: 5, description: "Paths as for attach_file, 100 MB together: copied into each teammate's inbox. Files a teammate attaches with attach_file come back with its result." },
     }, required: ["bot_ids", "message"] },
   },
@@ -256,6 +260,7 @@ const TOOL_DEFINITIONS = [
   RENAME_THREAD_TOOL_DEFINITION,
   SET_MAIN_THREAD_TOOL_DEFINITION,
   ...WORKFLOW_TOOL_DEFINITIONS,
+  ...PANEL_TOOL_DEFINITIONS,
   {
     name: "start_thread",
     description:
@@ -864,7 +869,8 @@ function catalogTools(profile: CatalogProfile) {
     (profile.room !== true || !ROOM_REFUSED_TOOL_NAMES.has(tool.name)) && (profile.board === true || !BOARD_TOOL_NAMES.has(tool.name)) &&
     (profile.imageGeneration === true || !IMAGE_TOOL_NAMES.has(tool.name)) && (profile.appHosting === true || !HOSTING_TOOL_NAMES.has(tool.name)) &&
     (profile.meetings === true || (!MEETING_TOOL_NAMES.has(tool.name) && tool.name !== "reset_cloud_computer")) &&
-    (profile.skillBurger !== false || !WORKFLOW_TOOL_NAMES.has(tool.name)));
+    (profile.skillBurger !== false || !WORKFLOW_TOOL_NAMES.has(tool.name)) &&
+    (profile.panels !== false || !PANEL_TOOL_NAMES.has(tool.name)));
   const AUTHORING_TOOLS = profile.skillAuthoring
     ? BOT_SCOPED_TOOLS
     : BOT_SCOPED_TOOLS.filter((tool) => !SKILL_TOOL_NAMES.has(tool.name));

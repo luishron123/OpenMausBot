@@ -183,6 +183,10 @@
             "type": "string",
             "description": "Only to answer a teammate's question: the assignment id its note names; message is the answer."
           },
+          "stop": {
+            "type": "string",
+            "description": "Stop work you handed on now, a running command included: its requestId; say why in message."
+          },
           "files": {
             "type": "array",
             "items": {
@@ -457,6 +461,204 @@
         "required": [
           "name",
           "action"
+        ]
+      }
+    },
+    {
+      "name": "list_panels",
+      "description": "List the panels, or with panel_id one panel's cards.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "panel_id": {
+            "type": "string",
+            "description": "The panel's id or key."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_panel",
+      "description": "Make a panel of cards you keep current. A key makes it idempotent (an existing key updates title, about, visibility). For a live card give set_panel_widget a prompt and schedule, or create an automation with panel_id.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "about": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "A stable name, e.g. \"daily-sales\"."
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "shared"
+            ],
+            "description": "private: only you and its card bots see it. Default shared."
+          }
+        },
+        "required": [
+          "title"
+        ]
+      }
+    },
+    {
+      "name": "set_panel_widget",
+      "description": "Add a card, or replace the one with this card_key. Send widget, prompt or both; prompt+schedule gives it its own updating automation (prompt alone builds it in a run now). Max 60 scheduled cards.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "panel_id": {
+            "type": "string",
+            "description": "The panel's id or key."
+          },
+          "card_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "A stable name, e.g. \"daily-sales\"."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "s",
+              "m",
+              "l"
+            ],
+            "description": "Width; s by default."
+          },
+          "widget": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "One JSON tree like show_widget's, without buttons or forms."
+          },
+          "fallback_text": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "What the card tracks; each update run reads it."
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "half",
+              "hour",
+              "day",
+              "week",
+              "manual"
+            ],
+            "description": "Self-update cadence, person's time zone: half=30 min, day=08:00, week=Mon 08:00, manual=on Refresh."
+          },
+          "alert": {
+            "type": "string",
+            "description": "Condition to warn the person about."
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            },
+            "description": "Names or URLs you read."
+          }
+        },
+        "required": [
+          "panel_id",
+          "title"
+        ]
+      }
+    },
+    {
+      "name": "update_panel_widget",
+      "description": "Change one card (card_id or card_key): widget plus a one-line summary. Without fresh data send failed with the reason instead; the card keeps its content.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "panel_id": {
+            "type": "string",
+            "description": "The panel's id or key."
+          },
+          "card_id": {
+            "type": "string"
+          },
+          "card_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "A stable name, e.g. \"daily-sales\"."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "s",
+              "m",
+              "l"
+            ],
+            "description": "Width; s by default."
+          },
+          "widget": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "One JSON tree like show_widget's, without buttons or forms."
+          },
+          "fallback_text": {
+            "type": "string"
+          },
+          "failed": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "description": "What changed."
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            },
+            "description": "Names or URLs you read."
+          },
+          "alert": {
+            "type": "string",
+            "description": "Only when the alert condition is met: one sentence for the person."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "What the card tracks; each update run reads it."
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "half",
+              "hour",
+              "day",
+              "week",
+              "manual"
+            ],
+            "description": "Self-update cadence, person's time zone: half=30 min, day=08:00, week=Mon 08:00, manual=on Refresh."
+          }
+        },
+        "required": [
+          "panel_id"
         ]
       }
     },
@@ -1989,6 +2191,14 @@
           "same_conversation": {
             "type": "boolean",
             "description": "app_event, webhook or schedule: each run continues the last run's conversation."
+          },
+          "panel_id": {
+            "type": "string",
+            "description": "Schedules: the panel (id or key) its runs keep current instead of reporting in chat; \"\" unlinks."
+          },
+          "card_key": {
+            "type": "string",
+            "description": "With panel_id: its own card's key."
           },
           "continuity": {
             "type": "boolean",

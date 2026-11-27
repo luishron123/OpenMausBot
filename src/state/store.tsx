@@ -61,6 +61,7 @@ import { forgetLiveTurns, noteRuntimeTurn, sendStop } from "@/lib/stop-turn";
 import { readLastConversation, rememberConversation } from "@/lib/last-conversation";
 import { readLastBotSection, rememberBotSection } from "@/lib/last-bot-section";
 import { showNotification } from "@/lib/notify";
+import { actionSound, approvalSound, errorSound, frameSound } from "./store-sounds";
 import { randomUuid } from "@/lib/random-uuid";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { speechOwner, spokenReplyStream } from "@/lib/spoken-reply-stream";
@@ -510,9 +511,9 @@ export interface AppState {
   liveCallVersion: number;
   liveCallLookupSeq: number;
   selectedId: string;
-  activeView: "chat" | "team-map" | "routines" | "files" | "web-panel" | "published-apps" | "team-files" | "announcements" | "skill-burgers";
+  activeView: "chat" | "team-map" | "routines" | "files" | "web-panel" | "published-apps" | "team-files" | "announcements" | "skill-burgers" | "panels";
   /** Folders a finished move left on this computer, for Files to offer sharing. */
-  filesSuggest: string[] | null; webPanelId?: string;
+  filesSuggest: string[] | null; webPanelId?: string; panelId?: string;
   routines: Routine[]; routineRunLimits?: RoutineRunLimits;
   routineRuns: RoutineRun[];
   routinesLoadState: "loading" | "ready" | "error"; routineRunsSince: number | null;
@@ -594,7 +595,7 @@ export type Action =
   | { type: "botsOrdered"; botIds: string[] } | { type: "groupsOrdered"; groupIds: string[] }
   | { type: "sectionDeleted"; section: string; sections: string[] }
   | { type: "showRoutines"; section?: "schedule" | "logs"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter }
-  | { type: "showTeamMap" } | { type: "showPublishedApps" } | { type: "showSkillBurgers" } | { type: "showTeamFiles" } | { type: "showAnnouncements" } | { type: "showWebPanel"; id: string }
+  | { type: "showTeamMap" } | { type: "showPublishedApps" } | { type: "showSkillBurgers" } | { type: "showPanels"; panelId?: string } | { type: "showTeamFiles" } | { type: "showAnnouncements" } | { type: "showWebPanel"; id: string }
   | { type: "showFiles"; suggest?: string[] }
   | { type: "showChat" }
   | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[]; since?: number; runLimits?: RoutineRunLimits }
@@ -946,11 +947,11 @@ function reduceApp(state: AppState, action: Action): AppState {
     case "forkPanelMessage": case "forkPanelActive": case "closeForkPanel":
       return reduceForkPanel(state, action);
     case "showTeamMap":
-    case "showFiles": case "showWebPanel": case "showPublishedApps": case "showSkillBurgers": case "showTeamFiles": case "showAnnouncements":
+    case "showFiles": case "showWebPanel": case "showPublishedApps": case "showSkillBurgers": case "showPanels": case "showTeamFiles": case "showAnnouncements":
       return {
         ...state,
-        activeView: action.type === "showFiles" ? "files" : action.type === "showWebPanel" ? "web-panel" : action.type === "showPublishedApps" ? "published-apps" : action.type === "showSkillBurgers" ? "skill-burgers" : action.type === "showTeamFiles" ? "team-files" : action.type === "showAnnouncements" ? "announcements" : "team-map",
-        filesSuggest: action.type === "showFiles" && action.suggest?.length ? action.suggest : null, webPanelId: action.type === "showWebPanel" ? action.id : state.webPanelId,
+        activeView: action.type === "showFiles" ? "files" : action.type === "showWebPanel" ? "web-panel" : action.type === "showPublishedApps" ? "published-apps" : action.type === "showSkillBurgers" ? "skill-burgers" : action.type === "showPanels" ? "panels" : action.type === "showTeamFiles" ? "team-files" : action.type === "showAnnouncements" ? "announcements" : "team-map",
+        filesSuggest: action.type === "showFiles" && action.suggest?.length ? action.suggest : null, webPanelId: action.type === "showWebPanel" ? action.id : state.webPanelId, panelId: action.type === "showPanels" ? action.panelId : state.panelId,
         settingsOpen: false, computerOpen: false, inspectorOpen: false, activityOpen: false, appSettingsOpen: false, pluginsOpen: false,
       };
     case "routinesHydrated":
@@ -2093,7 +2094,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       settled: (botId, threadId) => waitForExecutionSettings(stateRef.current.bots.filter((bot) => bot.id === botId), threadId), navigated: (botId) => navigation.set(botId, (navigation.get(botId) ?? 0) + 1), create: (botId, projectId) => botPatchQueue.flush(botId).then(() => api<{ bot: Bot }>(`/api/bots/${botId}/tasks`, { method: "POST", body: JSON.stringify({ projectId }) })) });
     let creatingBot = false;
     let noticeTimer: ReturnType<typeof setTimeout> | undefined;
-    const showError = (e: unknown) => { if (isBotLimitRefusal(e)) return; if (isNoAiRefusal(e)) wrapped({ type: "notice", notice: { kind: "note", botName: null, text: e.message } }); else rawDispatch({ type: "error", message: e instanceof Error ? e.message : String(e) }); };
+    const showError = (e: unknown) => { if (isBotLimitRefusal(e)) return; errorSound(); if (isNoAiRefusal(e)) wrapped({ type: "notice", notice: { kind: "note", botName: null, text: e.message } }); else rawDispatch({ type: "error", message: e instanceof Error ? e.message : String(e) }); };
     const showSavedState = (owner: SavedOwner) => (error: unknown) => {
       showError(error);
       void api<SavedSnapshot>("/api/bots?messages=0").then((snapshot) => {
@@ -2192,7 +2193,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
 
     const wrapped: React.Dispatch<Action> = (action) => {
-      store.flushFrames(); if (["select", "newTask", "switchTask", "newGroupTask", "switchGroupTask", "showChat", "showRoutines", "showTeamMap", "showFiles", "showWebPanel", "showPublishedApps", "showSkillBurgers", "showTeamFiles", "showAnnouncements"].includes(action.type)) selectionRevision.current++;
+      store.flushFrames(); if (["select", "newTask", "switchTask", "newGroupTask", "switchGroupTask", "showChat", "showRoutines", "showTeamMap", "showFiles", "showWebPanel", "showPublishedApps", "showSkillBurgers", "showPanels", "showTeamFiles", "showAnnouncements"].includes(action.type)) selectionRevision.current++;
       // Pin before any await or optimistic state change.
       action = pinBotThreadAction(action, stateRef.current.bots); action = launchTagged(action); holdMarkedUnread(action, stateRef.current); const fed = feedThreadAction(action, stateRef.current); if (!fed) return; action = fed;
       if (runNewChat(action)) return;
@@ -2200,10 +2201,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (action.type === "botPatched") action = { ...action, bot: withTaskWrites(action.bot) };
       if (action.type === "openForkPanel" && !action.loadId) action = { ...action, loadId: randomUuid() };
       if ((action.type === "send" || action.type === "sendGroup" || action.type === "editMessage") && !action.sendId) action = { ...action, sendId: randomUuid() };
-      const botBeforeUpdate =
-        action.type === "updateBot" || action.type === "setModel"
-          ? stateRef.current.bots.find((candidate) => candidate.id === action.botId)
-          : undefined;
+      actionSound(action);
+      const botBeforeUpdate = action.type === "updateBot" || action.type === "setModel" ? stateRef.current.bots.find((candidate) => candidate.id === action.botId) : undefined;
       const botBeforeSend = action.type === "send" ? stateRef.current.bots.find((candidate) => candidate.id === action.botId) : undefined;
       const leafBeforeEdit = action.type === "editMessage" ? stateRef.current.bots.find((candidate) => candidate.id === action.botId)?.activeLeafId ?? null : null;
       const executionBotsBeforeAction = (() => {
@@ -2422,7 +2421,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   body: JSON.stringify(owner ? { threadId: action.threadId, allowKey: action.alwaysAllow.key } : { alwaysAllow: next }),
                 });
               }
-              const response = await respond();
+              const response = approvalSound(await respond());
               if (response?.settlementPending && typeof response.message === "string") {
                 showError(new Error(response.message));
               }
@@ -3015,6 +3014,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
     const stopFrames = store.handleFrames((frame) => { handleFrame(frame); stateRef.current = store.getState(); });
     handleFrame = (frame) => {
+      frameSound(stateRef.current, frame);
       if (frame.kind === "config") bumpPeripheralVersion("config", "instances");
       else if (frame.kind === "routine" || frame.kind === "routine.deleted" || frame.kind === "routine.run") {
         bumpPeripheralVersion("routines");

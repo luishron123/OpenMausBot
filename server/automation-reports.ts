@@ -118,6 +118,8 @@ export interface AutomationReportDeps {
   /** A line the app adds under a run's reply or its failure line, in the language of the chat it reports to, taken once
    * (host/refused-lending.ts, host/no-terminal.ts): it is said even when the bot's reply is quiet. */
   notes?: { has(runId: string): boolean; take(runId: string, language: string | undefined): string | null };
+  /** A run whose answer goes elsewhere (a panel card's own update): no line, card copy, failure line or notice of it. */
+  quiet?(run: RoutineRun): boolean;
 }
 
 /** The reply with the app's own line under it, apart from the bot's words. */
@@ -130,7 +132,9 @@ export function createAutomationReports(deps: AutomationReportDeps) {
   let resumed = false;
   let flushing = false;
 
+  const quiet = (run: RoutineRun): boolean => deps.quiet?.(run) === true;
   const destination = (run: RoutineRun): { bot: BotRecord; threadId: string } | null => {
+    if (quiet(run)) return null;
     const bot = run.resultsThreadId && run.resultsThreadId !== run.threadId ? store.bot(run.botId) : undefined;
     const task = bot && !bot.hidden ? store.taskByThread(bot.id, run.resultsThreadId!) : undefined;
     return bot && task && !task.routineRunId ? { bot, threadId: task.threadId } : null;
@@ -326,6 +330,7 @@ export function createAutomationReports(deps: AutomationReportDeps) {
     runSettled(run: RoutineRun, turnId?: string): void {
       if (run.target !== "bot" || run.status !== "completed" || !run.threadId) return;
       if (run.deliver === "brief") return deps.brief?.(run, turnId);
+      if (quiet(run)) return void deps.routines()?.noteReport(run.id, { state: "quiet" });
       const path = store.activePath(run.threadId);
       const said = turnId ? path.findLast((message) => saidLine(message) && message.turnId === turnId) ?? path.findLast((message) => saidLine(message) && message.sentInTurn === turnId)
         : replyOf(run);
@@ -347,9 +352,10 @@ export function createAutomationReports(deps: AutomationReportDeps) {
      * A missed run, or one that failed before it had a conversation, has no line to say so, and keeps its card,
      * unless it delivers to the brief, which lists it as missed. */
     speaksFor(run: RoutineRun): boolean {
-      return run.target === "bot" && destination(run) !== null
-        && (run.deliver === "brief" || (run.status !== "missed" && (run.status !== "failed" || Boolean(run.threadId))));
+      return quiet(run) || (run.target === "bot" && destination(run) !== null
+        && (run.deliver === "brief" || (run.status !== "missed" && (run.status !== "failed" || Boolean(run.threadId)))));
     },
+    quiet,
     /** This conversation is a run's own, and only its last reply reaches the chat the run reports to. */
     reportsElsewhere(threadId: string): boolean {
       const run = deps.routines()?.runForThread(threadId);

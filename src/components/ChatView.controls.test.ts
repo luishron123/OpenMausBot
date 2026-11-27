@@ -108,25 +108,53 @@ describe("the header's right side", () => {
     }
   });
 
-  it("moves Stop out of the Simple header into the composer's round button while a turn runs, Call beside it", () => {
+  it("moves Stop out of the Simple header into the composer while a turn runs, Call beside it", () => {
     fixture.advanced = false;
     try {
       const busy = { ...bot, busy: true, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: true })) };
       const { markup, controls } = header(busy);
       expect(controls).not.toContain("Stop this turn");
-      const stop = markup.match(/<button[^>]*data-composer-stop="slot"[^>]*>/)?.[0] ?? "";
+      const stop = markup.match(/<button[^>]*data-composer-stop[^>]*>/)?.[0] ?? "";
       expect(stop).toContain('aria-label="Stop this turn"');
       expect(markup).toContain('data-call-button="composer"');
       expect(header({ ...busy, waitingForTeammates: true, busy: false, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: false, waitingForTeammates: true })) }).markup)
-        .toContain('data-composer-stop="slot"');
+        .toContain("data-composer-stop");
     } finally {
       fixture.advanced = true;
     }
   });
 
-  it("keeps Stop in the Advanced header while a turn runs", () => {
-    const { controls } = header({ ...bot, busy: true, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: true })) });
-    expect(controls).toContain('title="Stop this turn"');
+  it.each([["Advanced", true, false], ["a remote client's Simple", false, true]])("shows one Stop in %s mode, the composer's", (_, advanced, remote) => {
+    fixture.advanced = advanced;
+    if (remote) window.ogb = { remoteClient: { active: true } } as NonNullable<Window["ogb"]>;
+    try {
+      const busy = { ...bot, busy: true, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: true })) };
+      const { markup, controls } = header(busy);
+      expect(controls).not.toContain("Stop this turn");
+      expect(markup.match(/(aria-label|title)="Stop this turn"/g)).toHaveLength(1);
+      expect(markup).toContain("data-composer-stop");
+    } finally {
+      delete window.ogb;
+      fixture.advanced = true;
+    }
+  });
+
+  it.each([
+    ["Advanced, working", true, { busy: true }],
+    ["Advanced, waiting for teammates", true, { busy: false, waitingForTeammates: true }],
+    ["Simple, working", false, { busy: true }],
+    ["Simple, waiting for teammates", false, { busy: false, waitingForTeammates: true }],
+  ])("shows no Stop to someone who can only view (%s)", (_, advanced, state) => {
+    fixture.advanced = advanced;
+    fixture.canWrite = false;
+    try {
+      const { markup } = header({ ...bot, ...state, tasks: (bot.tasks ?? []).map((task) => ({ ...task, ...state })) });
+      expect(markup).not.toContain("Stop this turn");
+      expect(markup).not.toContain("data-composer-stop");
+    } finally {
+      fixture.canWrite = null;
+      fixture.advanced = true;
+    }
   });
 
   it("leaves Advanced mode's model, computer and ⋯ exactly as they were, the inspector unlocked", () => {
@@ -144,7 +172,7 @@ describe("the header's right side", () => {
 });
 
 describe("the Simple header", () => {
-  it("is one pill: the avatar and name, with a dot for another busy conversation, the open thread to switch from, and no title, role or way back", () => {
+  it("is one pill: the avatar and name, with a dot for another busy conversation, a chevron to the threads, the plus at the header's end, and no title, role or way back", () => {
     const busyElsewhere: Bot = { ...bot, title: "Research", mainThreadId: "other", tasks: [...bot.tasks!, { threadId: "other", title: "Other", createdAt: 0, busy: true, activity: "working" }] };
     fixture.advanced = false;
     try {
@@ -156,9 +184,14 @@ describe("the Simple header", () => {
       expect(pill[1]).toContain(">Pepper</span>");
       expect(pill[1]).toContain('data-chathead-elsewhere="true"');
       expect(shell[0].match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "bg-composer", "ring-[0.5px]", "shadow-(--shadow-float)", "p-[5.5px]"]));
-      // A bot with two threads names the one on screen beside it, which opens the others.
+      // A bot with two threads shows only its name and a chevron to its threads; New thread stays beside the computer button.
       expect(threads[0]).toContain('aria-expanded="false"');
-      expect(threads[1]).toContain("data-chathead-conversation");
+      expect(identity).not.toContain("data-chathead-conversation");
+      expect(identity).not.toContain("data-thread-chip-new");
+      expect(simple.slice(simple.indexOf("data-chathead-controls"))).toMatch(/data-tour="computer"[\s\S]*data-new-thread="true"/);
+      // New thread wears the computer button's round chip: same size, surface, shadow and hover.
+      const chip = (attr: string) => new Set(simple.match(new RegExp(`<button[^>]*${attr}[^>]*>`))![0].match(/class="([^"]*)"/)![1]!.split(" ").filter((name) => !["relative", "shrink-0", "md:hidden", "text-accent"].includes(name)));
+      expect(chip('data-new-thread="true"')).toEqual(chip('data-tour="computer"'));
       expect(identity.replace(pill[0], "").replace(threads[0], "").replace(/<span role="status"[^>]*>[^<]*<\/span>/, "")).not.toMatch(/<(button|a|span)[\s>]/);
       for (const gone of ["data-chathead-role", "data-background-activity", "data-chathead-back", 'data-testid="chat-more"']) {
         expect(simple, gone).not.toContain(gone);
@@ -254,7 +287,7 @@ describe("header name", () => {
       expect(pillOf(busyMarkup)).toBe(pillOf(idleMarkup));
       expect(busyMarkup).toMatch(/<span role="status" class="sr-only" data-chathead-status="true">Working…<\/span>/);
       expect(idleMarkup).toMatch(/<span role="status" class="sr-only" data-chathead-status="true"><\/span>/);
-      expect(busyMarkup).toContain(advanced ? 'title="Stop this turn"' : 'aria-label="Stop this turn"');
+      expect(busyMarkup).toContain('aria-label="Stop this turn"');
     }
     fixture.advanced = true;
   });

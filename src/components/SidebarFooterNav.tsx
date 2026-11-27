@@ -1,12 +1,14 @@
-import { AppWindow, FolderOpen, FolderTree, Globe, Puzzle, Rocket, UsersRound, Zap } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { AppWindow, FolderOpen, FolderTree, Globe, LayoutDashboard, Puzzle, Rocket, UsersRound, Zap } from "lucide-react";
+import { useId, useMemo, type ReactNode } from "react";
 
 import { useAppTriggers } from "@/lib/app-triggers";
 import { automationsFrom, hasUnseenProblemRun } from "@/lib/automations";
 import { cn } from "@/lib/cn";
 import { useCloudFilesReady } from "@/lib/cloud-files";
 import { t } from "@/lib/i18n";
+import { usePanelAlertCount } from "@/lib/panels";
 import { useAdvancedMode } from "@/lib/interface-mode";
+import { useFeature } from "@/lib/use-feature";
 import { useWebPanels } from "@/lib/web-panel-preferences";
 import { useSidebarToolsLayout, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { useStore } from "@/state/store";
@@ -21,6 +23,7 @@ function NavRow({
   icon,
   active = false,
   attention = false,
+  attentionLabel,
   iconsOnly,
   rail = false,
   tourId,
@@ -31,11 +34,15 @@ function NavRow({
   icon: (active: boolean) => ReactNode;
   active?: boolean;
   attention?: boolean;
+  /** Read out for the dot; with the icon alone it joins the row's description. */
+  attentionLabel?: string;
   iconsOnly: boolean;
   rail?: boolean;
   tourId?: string;
   onClick: () => void;
 }) {
+  const dotId = useId();
+  const described = attention && attentionLabel && iconsOnly;
   return (
     <button
       type="button"
@@ -43,6 +50,7 @@ function NavRow({
       data-sidebar-nav={id}
       onClick={onClick}
       aria-label={iconsOnly ? label : undefined}
+      aria-describedby={described ? dotId : undefined}
       title={iconsOnly ? label : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
@@ -56,7 +64,10 @@ function NavRow({
       {!iconsOnly && <span className="flex-1 truncate text-[14px] leading-5">{label}</span>}
       {attention && (
         <span
+          id={dotId}
           data-testid="routines-attention"
+          role={attentionLabel ? "img" : undefined}
+          aria-label={attentionLabel}
           className={cn("size-2 shrink-0 rounded-full bg-danger", iconsOnly && (rail ? "absolute right-1 top-1" : "absolute right-2 top-2"))}
         />
       )}
@@ -127,6 +138,18 @@ export function SidebarFooterNav({
   const iconSize = iconsOnly && !rail ? 20 : 16;
   const tone = (active: boolean) => (active ? "text-accent" : "text-ink-secondary");
   const automationsNeedYou = useAutomationsNeedYou();
+  const panels = useFeature("panels");
+  const panelAlerts = usePanelAlertCount(panels);
+  const panelsRow = panels && <NavRow
+    id="panels"
+    label={t("sidebar.nav.panels")}
+    iconsOnly={iconsOnly || toolbar}
+    active={state.activeView === "panels"}
+    attention={panelAlerts > 0}
+    attentionLabel={panelAlerts === 1 ? t("panels.list.alertsOne") : t("panels.list.alertsMany", { count: panelAlerts })}
+    icon={(active) => <LayoutDashboard size={iconSize} className={tone(active)} />}
+    onClick={() => dispatch({ type: "showPanels" })}
+  />;
   const automationsRow = <NavRow
     id="automations"
     label={t("sidebar.nav.automations")}
@@ -161,6 +184,7 @@ export function SidebarFooterNav({
 
   const rows = (
     <>
+      {panelsRow}
       {automationsRow}
       {appsRow}
       {(advanced || iconsOnly) && (

@@ -29,7 +29,7 @@ import { callImageTool, IMAGE_TOOL_NAMES } from "./agents-image-tools.ts";
 import { callHostingTool, HOSTING_TOOL_NAMES } from "./agents-hosting-tools.ts";
 import { callMeetingTool, MEETING_TOOL_NAMES } from "./agents-meeting-tools.ts";
 import { callMausBotTool, MAUSBOT_TOOL_NAMES } from "./agents-mausbot-tools.ts";
-import { callPageTool, PAGE_TOOL_NAMES } from "./agents-pages-tools.ts";
+import { callPageTool, PAGE_TOOL_NAMES } from "./agents-pages-tools.ts"; import { callPanelTool, PANEL_TOOL_NAMES } from "./agents-panel-tools.ts";
 import { callShareTool, SHARE_TOOL_NAMES } from "./agents-share-tool.ts";
 import { callPersonTool, PERSON_TOOL_NAMES } from "./agents-person-tools.ts";
 import { callDevsTool, DEVS_TOOL_NAMES } from "./agents-devs-tools.ts";
@@ -253,6 +253,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   if (MEETING_TOOL_NAMES.has(name)) return callMeetingTool(name, args, context);
   if (MAUSBOT_TOOL_NAMES.has(name)) return callMausBotTool(name, args, context);
   if (PAGE_TOOL_NAMES.has(name)) return callPageTool(name, args, context);
+  if (PANEL_TOOL_NAMES.has(name)) return callPanelTool(name, args, context);
   if (SHARE_TOOL_NAMES.has(name)) return callShareTool(args, context);
   if (PERSON_TOOL_NAMES.has(name)) return callPersonTool(name, args, context);
   if (DEVS_TOOL_NAMES.has(name)) return callDevsTool(name, args, context);
@@ -308,11 +309,11 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       && (canonical.thread === undefined || (typeof canonical.thread === "string" && /^[\w-]{1,128}$/.test(canonical.thread)))
       && (canonical.reply === undefined || canonical.reply === "resume" || canonical.reply === "none")
       && optional("consult", "boolean") && optional("in_my_folder", "boolean")
-      && optional("done_when", "string") && optional("reason", "string") && optional("title", "string") && optional("answers", "string")
+      && optional("done_when", "string") && optional("reason", "string") && optional("title", "string") && optional("answers", "string") && optional("stop", "string")
       && (canonical.group_id === undefined || canonical.group_id === null || typeof canonical.group_id === "string") && (canonical.files === undefined || canonical.files === null || (Array.isArray(canonical.files) && canonical.files.every((path) => typeof path === "string") && canonical.files.filter((path) => path.trim()).length <= 5));
     if (!usable) {
       return {
-        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, title, thread ("standing", "new" or the id of a thread you opened on that teammate), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false), done_when, answers and files (an array of at most 5 file paths) are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
+        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, title, thread ("standing", "new" or the id of a thread you opened on that teammate), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false), done_when, answers, stop (an assignment id you handed on, to stop it) and files (an array of at most 5 file paths) are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
         isError: true,
       };
     }
@@ -323,7 +324,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       thread: canonical.thread, reply: canonical.reply,
       title: typeof canonical.title === "string" && canonical.title.trim() ? canonical.title.trim() : undefined, consult: canonical.consult, inMyFolder: canonical.in_my_folder,
       done_when: typeof canonical.done_when === "string" && canonical.done_when.trim() ? canonical.done_when.trim() : undefined,
-      answers: typeof canonical.answers === "string" && canonical.answers.trim() ? canonical.answers.trim() : undefined, files: Array.isArray(canonical.files) && canonical.files.some((path) => path.trim()) ? canonical.files.filter((path) => path.trim()) : undefined,
+      answers: typeof canonical.answers === "string" && canonical.answers.trim() ? canonical.answers.trim() : undefined, stop: typeof canonical.stop === "string" && canonical.stop.trim() ? canonical.stop.trim() : undefined, files: Array.isArray(canonical.files) && canonical.files.some((path) => path.trim()) ? canonical.files.filter((path) => path.trim()) : undefined,
     }) });
     return apiAnswer(answer.ok, answer.status, answer.body);
   }

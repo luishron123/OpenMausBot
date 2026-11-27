@@ -9,7 +9,7 @@ const run = (access?: "read-and-draft"): RoutineRun => ({
   manual: false, createdAt: 0, threadId: "run-thread", checkKey: "chk-1", ...(access ? { access } : {}),
 });
 
-function fence(access: "read-and-draft" | null = "read-and-draft") {
+function fence(access: "read-and-draft" | null = "read-and-draft", mayReach?: (threadId: string, route: string) => boolean) {
   const decided: unknown[] = [];
   const drafted: string[] = [];
   const respond = vi.fn(async () => "rejected" as const);
@@ -19,6 +19,7 @@ function fence(access: "read-and-draft" | null = "read-and-draft") {
     stale: () => false, decide: (row) => decided.push(row), release: () => {},
     mayDraft: (_key, threadId, to) => threadId === "t-ada" && to === "ada@x.test" && !drafted.includes(threadId),
     drafted: (_key, threadId) => drafted.push(threadId),
+    ...(mayReach ? { mayReach } : {}),
   });
   return { gate, decided, drafted, respond };
 }
@@ -89,6 +90,13 @@ describe("the fence around a read-and-draft run", () => {
       expect(gate.refusesRoute(bot, "run-thread", route[0]!, route[1]!)).toBe(true);
     }
     expect(gate.refusesRoute(bot, "main-chat", "POST", "/api/internal/memory")).toBe(false);
+  });
+
+  it("lets a run reach one more route only where its host says so", () => {
+    const { gate } = fence("read-and-draft", (threadId, route) => threadId === "run-thread" && route === "POST /api/internal/panels/update-card");
+    expect(gate.refusesRoute(bot, "run-thread", "POST", "/api/internal/panels/update-card")).toBe(false);
+    expect(gate.refusesRoute(bot, "run-thread", "POST", "/api/internal/panels/set-card")).toBe(true);
+    expect(fence().gate.refusesRoute(bot, "run-thread", "POST", "/api/internal/panels/update-card")).toBe(true);
   });
 
   it("counts an allowed reply draft, so the same thread is never drafted twice", () => {

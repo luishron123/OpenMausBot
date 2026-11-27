@@ -332,8 +332,10 @@ export interface ProviderAdapter {
    * - "steered": accepted into the live turn.
    * - "refused": provably not delivered; the caller may queue it.
    * - "indeterminate": maybe delivered; the caller must NOT re-queue, or it could run twice.
-   * A driver that cannot read an attached image refuses the whole steer. */
-  steer?(threadId: ThreadId, text: string, images?: readonly TurnImageInput[]): Promise<SteerOutcome>;
+   * A driver that cannot read an attached image refuses the whole steer. An agent can still turn down a message reported
+   * "steered" while the turn runs on (Antigravity's CLI 1.5): the driver then calls `late.refused`, once, and the caller
+   * may queue the message. Such a driver refuses a steer that comes without `late`. */
+  steer?(threadId: ThreadId, text: string, images?: readonly TurnImageInput[], late?: SteerLate): Promise<SteerOutcome>;
   hasSession(threadId: ThreadId): boolean;
   /** The local process running this thread's engine, while there is one: a long tool call's own processes are under it. */
   enginePid?(threadId: ThreadId): number | undefined;
@@ -391,6 +393,11 @@ export type EngineCompactResult =
   | { ok: false; reason: string };
 
 export type SteerOutcome = "steered" | "refused" | "indeterminate";
+
+/** What a caller of `steer` hears after the outcome. */
+export interface SteerLate {
+  refused(): void;
+}
 
 export interface ProviderSnapshot {
   /** Separate, explicitly authorized ChatGPT-plan billing (not Codex login). */

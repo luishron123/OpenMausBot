@@ -1,7 +1,7 @@
 // ACP has no steer method, so each agent takes a message into its running turn its own way: a slash command it
 // advertises (`available_commands_update`, Hermes), an extension request (`_session/steering`, OpenCode 2.3.0), or a
-// second session/prompt (Devin, 3000.13.4).
-import type { SteerOutcome } from "../../contracts.ts";
+// second session/prompt (Devin, 3000.13.4; Antigravity's native CLI, 1.5).
+import type { SteerLate, SteerOutcome } from "../../contracts.ts";
 
 /** How an agent takes a person's message into its running turn. */
 export interface AcpCommandSteer {
@@ -27,6 +27,13 @@ export interface AcpPromptSteer {
   capability?: string;
   /** For an agent that does not announce the capability: whether this process's environment opts in. */
   enabled?(env: Record<string, string | undefined>): boolean;
+  /** For an agent that steers by release rather than by a capability: whether this process's `initialize` result names one. */
+  supported?(initializeResult: unknown): boolean;
+  /** The agent rejects a prompt while the turn waits on a permission or question answer, so none is sent then. */
+  notWhileAsking?: boolean;
+  /** Antigravity's CLI: taking a prompt in, the agent answers the one that carried the turn, and the new one carries it on, so
+   * a later steer joins it too. A steer is taken once that answer arrives; one the agent rejects (`rejected`) is refused. */
+  takeOver?: { rejected(error: unknown): boolean };
   /** The run a prompt reply ends; replies of one run report their usage once. */
   run?(response: unknown): string | undefined;
   /** A steer reply that only reports its message was taken into the running turn; the turn's own reply is the outcome. */
@@ -38,7 +45,7 @@ export type AcpSteerSupport = AcpCommandSteer | AcpRequestSteer | AcpPromptSteer
 export interface AcpTurnSteering {
   /** True for the agent's answer to a steer still out, which is never part of the reply. */
   swallow(chunk: string): boolean;
-  steer(text: string): Promise<SteerOutcome>;
+  steer(text: string, late?: SteerLate): Promise<SteerOutcome>;
   /** The turn's own prompt is answered: no new steer starts. Null when no steer is out; otherwise resolves once they
    * have ended, and a steer the agent ran as a prompt of its own streams into this turn until then. */
   promptAnswered(): Promise<void> | null;
@@ -136,27 +143,71 @@ export function acpRequestSteering(running: () => boolean, send: (text: string) 
   };
 }
 
-/** `send` carries one `session/prompt` and settles when the agent answers it, at the end of the run. A steer is reported as
- * steered once it is sent: the agent gives no earlier answer. */
-export function acpPromptSteering(running: () => boolean, send: (text: string) => Promise<unknown>): AcpTurnSteering {
+/** `send` carries one `session/prompt` and settles when the agent answers it, at the end of the run. Without `takeOver` a
+ * steer is reported as steered once it is sent: the agent gives no earlier answer. With it, steers go one at a time, each
+ * decided by the agent: taken in when it answers the prompt carrying the turn while the turn is `live`, refused when it
+ * rejects the steer or the turn stops first, indeterminate when the steer fails any other way before that answer (it timed
+ * out, or the turn settled and failed every request still out): it was sent and may run. The turn waits for every steer
+ * the agent took. */
+export function acpPromptSteering(running: () => boolean, send: (text: string) => Promise<unknown>, takeOver?: AcpPromptSteer["takeOver"],
+  live: () => boolean = running): AcpTurnSteering {
   let answered = false;
+  let markAnswered = () => {};
+  // Resolves when the prompt carrying the turn is answered: first the turn's own, then each steer the agent took.
+  let carrier = new Promise<void>((resolve) => { markAnswered = resolve; });
+  let previous: Promise<unknown> = Promise.resolve();
   const pending = new Set<Promise<unknown>>();
+  const track = (reply: Promise<unknown>, refused: (error: unknown) => boolean) => {
+    const sent = reply.then(
+      (answer) => { steering.replies!.push(answer); },
+      (error) => { if (!refused(error)) steering.failure ??= error; },
+    ).finally(() => pending.delete(sent));
+    pending.add(sent);
+  };
+  const takenOver = async (guidance: string, late?: SteerLate): Promise<SteerOutcome> => {
+    // A caller that could not hear a late refusal waits in its queue instead.
+    if (!guidance || !late || (answered && !pending.size) || !running()) return "refused";
+    let outcome: SteerOutcome | undefined;
+    let report: (verdict: SteerOutcome) => void = () => {};
+    const reported = new Promise<SteerOutcome>((resolve) => { report = resolve; });
+    const decide = (verdict: SteerOutcome) => { if (outcome === undefined) report(outcome = verdict); return outcome; };
+    const reply = send(guidance);
+    // The CLI also answers the carrying prompt when that run ends on its own, and only then rejects the steer.
+    // Only a steer that carries the turn answers for it: one that failed before that leaves the turn to its own prompt.
+    track(reply, (error) => {
+      if (outcome !== "steered") return true;
+      if (!takeOver!.rejected(error)) return false;
+      late.refused();
+      return true;
+    });
+    // A reply that comes before the carrying prompt's answer only ends a stopped turn: the agent never took the steer.
+    // Only the agent's own rejection proves that of a failed one: a timeout, a closed session or a settled turn leaves the
+    // words sent and maybe taken in, so the caller records them instead of sending them again.
+    void reply.then(() => decide(live() ? "steered" : "refused"), (error) => decide(takeOver!.rejected(error) ? "refused" : "indeterminate"));
+    carrier = carrier.then(() => decide(live() ? "steered" : "refused") === "steered" ? reply.then(() => undefined, () => undefined) : undefined);
+    return reported;
+  };
   const steering: AcpTurnSteering = {
     replies: [],
     swallow: () => false,
-    async steer(text) {
+    async steer(text, late) {
       const guidance = text.trim();
+      if (takeOver) {
+        const outcome = previous.then(() => takenOver(guidance, late));
+        previous = outcome;
+        return outcome;
+      }
       if (!guidance || answered || !running()) return "refused";
-      const sent = send(guidance).then(
-        (reply) => { steering.replies!.push(reply); },
-        (error) => { steering.failure ??= error; },
-      ).finally(() => pending.delete(sent));
-      pending.add(sent);
+      track(send(guidance), () => false);
       return "steered";
     },
     promptAnswered() {
       answered = true;
-      return pending.size ? Promise.all(pending).then(() => undefined) : null;
+      markAnswered();
+      if (!pending.size) return null;
+      // A steer taken in while these run carries the turn on, so wait until none is out.
+      const drain = async (): Promise<void> => { while (pending.size) await Promise.all([...pending, previous]); };
+      return drain();
     },
   };
   return steering;
@@ -171,6 +222,8 @@ export function turnAnswers(support: AcpSteerSupport | undefined, result: any, r
 export interface AcpSteerIo {
   /** The turn's own prompt is out, nothing stopped it, and the session is live. */
   open(): boolean;
+  /** The turn waits on a permission or question answer from the person. */
+  asking(): boolean;
   commands(): ReadonlySet<string> | undefined;
   initializeResult(): any;
   env: Record<string, string | undefined>;
@@ -184,7 +237,10 @@ export function turnSteering(support: AcpSteerSupport, io: AcpSteerIo): AcpTurnS
       (text) => io.extension(support.method, text));
   }
   if ("kind" in support && support.kind === "prompt") {
-    return acpPromptSteering(() => io.open() && (support.enabled ? support.enabled(io.env) : io.initializeResult()?.agentCapabilities?._meta?.[support.capability ?? ""] === true), io.prompt);
+    const allowed = () => support.supported ? support.supported(io.initializeResult())
+      : support.enabled ? support.enabled(io.env)
+      : io.initializeResult()?.agentCapabilities?._meta?.[support.capability ?? ""] === true;
+    return acpPromptSteering(() => io.open() && !(support.notWhileAsking && io.asking()) && allowed(), io.prompt, support.takeOver, io.open);
   }
   return acpTurnSteering(support, () => io.open() && io.commands()?.has(support.command) === true, io.prompt);
 }

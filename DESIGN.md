@@ -48,7 +48,11 @@ where they belong instead of adding new places.
   header in both modes, because starting a thread is an everyday action people
   look for at the top. With Thread tabs on, the bot's threads take the pill's
   place in the header as tabs, with the plus at their end. With it off, Simple
-  mode's pill opens a bot's threads once it has two, and the plus sits at their end.
+  mode's pill keeps to the bot's name; once the bot has two threads a chevron
+  beside it opens and folds them (the main thread first, starred; it stays open
+  while you move between them, scrolls the picked one into the middle, and
+  shows a small arrow at an end that hides more), and the plus
+  stays at the header's end beside the computer button, as for a bot with one.
 - **No count badges and no "needs you" summaries** above the sidebar list or
   in the header. A status mark on the row it belongs to is fine.
 - **Settings for one bot live in its bot panel.** App-wide settings live in
@@ -285,7 +289,7 @@ and use it everywhere, rather than styling a one-off.
 | You need | Use |
 |---|---|
 | Class merging | `cn()` from `src/lib/cn.ts` |
-| A button | `.ui-button` with `-sm` / `-md` / `-lg`, `-pill`, `-primary`, or `.ui-icon-button` |
+| A button | `.ui-button` with `-sm` / `-md` / `-lg`, `-pill`, `-primary`, or `.ui-icon-button`; `.ui-button-ghost` on either for a quiet action beside a label (no border or fill at rest) |
 | A chip or pill | `.ui-chip` (static), `.ui-pill` (clickable) |
 | A menu | `MENU_SHEET`, `MENU_ROW`, `MENU_LABEL`, `MENU_SEPARATOR`, `MENU_META` and the rest of `src/components/menu-recipe.ts`; `SidebarPopoverMenu` for anchored menus; `useMenuMotion` |
 | A dropdown | `Select` from `src/components/Select.tsx`; never a native `<select>` |

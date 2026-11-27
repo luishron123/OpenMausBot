@@ -2,7 +2,7 @@
 // beside the person's private data, so it gets no way to act outside or to persist anything. Everything is allow-only:
 // - the engine runs at Ask, and the server answers every request in the run itself: each is refused, never a card;
 // - of OpenMausBot's own routes it may reach only conversation reads, the paging of its own long results, the engine's
-//   hooks and the connected-apps relay;
+//   hooks and the connected-apps relay, and a panel card's own update run its one card's update;
 // - through the relay it may only read Gmail and Google Calendar, and write a draft replying in one of the threads its
 //   checks handed it, to that thread's sender, once;
 // - what those reads return reaches it only as records;
@@ -66,6 +66,8 @@ export interface ReadAndDraftDeps {
   look?(threadId: string): { draft(reply: DraftReply): boolean } | null;
   /** Drafts a confined conversation was let write, by its bot. */
   wroteDrafts?(botId: string, count: number): void;
+  /** One more of OpenMausBot's own routes this conversation's run may reach ("POST /api/internal/…"). */
+  mayReach?(threadId: string, route: string): boolean;
 }
 
 export interface DraftReply { threadId: string; to?: string }
@@ -161,7 +163,7 @@ export function createReadAndDraft(deps: ReadAndDraftDeps) {
 
   function refusesRoute(bot: Pick<Bot, "id" | "name">, threadId: string, method: string, path: string): boolean {
     const route = `${method} ${path}`;
-    return !ROUTES.has(route) && confines(threadId) && refuse(bot, threadId, route);
+    return !ROUTES.has(route) && confines(threadId) && deps.mayReach?.(threadId, route) !== true && refuse(bot, threadId, route);
   }
 
   /** True when the frame was refused; an allowed draft is counted, so a retry of the run never writes it twice. */

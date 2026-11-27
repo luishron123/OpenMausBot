@@ -29,7 +29,8 @@ import type { RequestAuth } from "../request-auth.ts";
 import type { RoutineManager } from "../routines.ts";
 import { acceptedSendMatch, parseSendId } from "../send-idempotency.ts";
 import type { DirectSendInput, DirectSendReceipt } from "../direct-send.ts";
-import { cancelSteeredMessage, holdSteeredQueue, queuedSteerSender, queuedSteeredMessage, restoreHeldSteeredQueue, settleHeldSteeredQueue } from "../steer-queue.ts";
+import { failedNoticeTool } from "../chat-notices.ts";
+import { cancelSteeredMessage, holdSteeredQueue, queuedSteerSender, queuedSteeredMessage, requeueSettledSteer, restoreHeldSteeredQueue, settleHeldSteeredQueue } from "../steer-queue.ts";
 import { routeRunOwners, type Actor, type RouteRunOwners } from "../host/run-owner.ts";
 import type { BotRecord, GroupRecord, Message, Store } from "../store.ts";
 import { extractSteerImages } from "../turn-images.ts";
@@ -419,12 +420,12 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       const prompt = (steerInput?.texts ?? held.items.map((item) => item.prompt)).join("\n\n");
       const images = steerInput?.images ?? [];
       const steerTarget = handoffs.current(bot.threadId);
-      let steered: SteerOutcome = "refused";
+      let steered: SteerOutcome = "refused", refusedEarly = false, refusedLate = (): void => { refusedEarly = true; };
       if (steerAdmission.action === "steer" && instance?.adapter.steer) {
-        steered = await (images.length > 0
-          ? instance.adapter.steer(bot.threadId, prompt, images)
-          : instance.adapter.steer(bot.threadId, prompt))
+        // The agent may still turn a steer it took down (Antigravity): before it is recorded, that only refuses it.
+        steered = await instance.adapter.steer(bot.threadId, prompt, images.length > 0 ? images : undefined, { refused: () => refusedLate() })
           .catch((): SteerOutcome => "indeterminate");
+        if (refusedEarly) steered = "refused";
       }
       // The steer awaited adapter work: re-read every ownership invariant before writing anything.
       const current = store.projectBotForTask(bot.id, bot.threadId);
@@ -454,6 +455,18 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
         for (const message of messages) handoffs.steered(bot.threadId, steerTarget, instance?.instanceId, message.id);
         const queueIds = held.items.map((item) => item.messageId);
         settleHeldSteeredQueue(held);
+        if (steered === "indeterminate") store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedNoticeTool("chat.notice.steerUnconfirmed") });
+        // After it is recorded, each line loses its mark and waits once more, in order, at the head of the queue; one that
+        // could not be written says so in the thread, its row left to send again.
+        refusedLate = () => {
+          refusedLate = () => {};
+          for (const message of messages) store.patchMessage(bot.threadId, message.id, { steered: undefined });
+          try { requeueSettledSteer(held, messages.map((message) => message.id)); }
+          catch (error) {
+            console.warn("steer: could not queue a steer the agent turned down", error);
+            store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedNoticeTool("chat.notice.unreadMessage") });
+          }
+        };
         return json(res, 200, { ok: true, steered: true, threadId: bot.threadId, messages, queueIds });
       }
       if (steered === "indeterminate") {
