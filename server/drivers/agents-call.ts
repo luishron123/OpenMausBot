@@ -99,8 +99,7 @@ function renderAssignmentStatus(r: Json, id: string): string {
   if (question && (a.status === "needs_input" || a.outcome === "needs_input")) {
     lines.push(`It is parked on a question for the person: ${JSON.stringify(question)}. Nothing moves until the person answers it in that thread; tell them and do not keep checking.`);
   }
-  const part = jsonRecord(raw.resultPart) ? raw.resultPart : undefined;
-  if (part) return [lines[0], ...resultPartLines(part, id)].join("\n");
+  if (jsonRecord(raw.resultPart)) return [lines[0], ...resultPartLines(raw.resultPart, id)].join("\n");
   lines.push(...assignmentResultLines(a, id));
   const children = Array.isArray(r.children) ? r.children.filter(jsonRecord) : [];
   if (children.length) lines.push("Its own hand-offs:", ...children.map((child) => `- ${assignmentLine(child)}`));
