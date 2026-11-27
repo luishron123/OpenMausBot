@@ -38,46 +38,23 @@ beforeEach(() => { dispatch.mockClear(); onToggle.mockClear(); });
 afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHTML = ""; });
 
 describe("the pill's thread switcher", () => {
-  it("shows only the bot's name, which still opens its panel", () => {
+  it("names the open thread beside the bot, and the bot's name still opens its panel", () => {
     render(pepper(THREADS, "launch"));
-    expect(q("[data-chathead-conversation]")).toBeNull();
-    expect(q("[data-chathead-switch]")?.textContent).toBe("Pepper");
+    expect(q("[data-chathead-conversation]")?.textContent).toBe("Launch plan");
     act(() => q("[data-chathead-pill]")!.click());
     expect(onToggle).toHaveBeenCalledOnce();
     expect(q("[role=listbox]")).toBeNull();
   });
 
-  it("opens on a click of its chevron, never on hover, into the threads: the main one first, then pinned, the open one selected", () => {
+  it("opens on a click, never on hover, into the threads: pinned first, the open one selected", () => {
     render(pepper(THREADS, "launch"));
     act(() => { q("[data-chathead-threads]")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
     expect(q("[role=listbox]")).toBeNull();
     act(() => q("[data-chathead-threads]")!.click());
-    expect(chips().map((chip) => chip.textContent)).toEqual(["Weekly sales", "Launch plan", "Berlin trip"]);
-    expect(chips()[1].getAttribute("aria-selected")).toBe("true");
-    expect(chips()[0].querySelector('[aria-label="Working"]')).not.toBeNull();
-    expect(chips()[1].querySelector('[aria-label="Pinned"]')).not.toBeNull();
-  });
-
-  it("stars the main thread", () => {
-    render(pepper([task("sales", "Weekly sales", 1), task("trip", "Berlin trip", 3)], "trip"));
-    act(() => q("[data-chathead-threads]")!.click());
-    expect(chips()[0].textContent).toBe("Weekly sales");
-    expect(chips()[0].querySelector('[aria-label="Main"]')).not.toBeNull();
-    expect(chips()[1].querySelector('[aria-label="Main"]')).toBeNull();
-  });
-
-  it("folds back from the same chevron, which says what it will do", () => {
-    render(pepper(THREADS, "launch"));
-    const chevron = q("[data-chathead-threads]")!;
-    expect(chevron.getAttribute("aria-label")).toBe("Expand Pepper threads");
-    act(() => chevron.click());
-    expect(q("[role=listbox]")).not.toBeNull();
-    expect(q("[data-chathead-threads]")!.getAttribute("aria-expanded")).toBe("true");
-    expect(q("[data-chathead-threads]")!.getAttribute("aria-label")).toBe("Collapse Pepper threads");
-    act(() => q("[data-chathead-threads]")!.click());
-    expect(q("[role=listbox]")).toBeNull();
-    expect(q("[data-chathead-threads]")!.getAttribute("aria-expanded")).toBe("false");
-    expect(sent()).toEqual([]);
+    expect(chips().map((chip) => chip.textContent)).toEqual(["Launch plan", "Weekly sales", "Berlin trip"]);
+    expect(chips()[0].getAttribute("aria-selected")).toBe("true");
+    expect(chips()[1].querySelector('[aria-label="Working"]')).not.toBeNull();
+    expect(chips()[0].querySelector('[aria-label="Pinned"]')).not.toBeNull();
   });
 
   it("switches to a picked thread and folds back", () => {
@@ -99,11 +76,11 @@ describe("the pill's thread switcher", () => {
     expect(sent()).toEqual([]);
   });
 
-  it("has no plus of its own, folded or open: New thread stays at the header's end", () => {
+  it("starts a new thread from its plus", () => {
     render(pepper(THREADS, "launch"));
-    expect(q("[data-thread-chip-new]")).toBeNull();
     act(() => q("[data-chathead-threads]")!.click());
-    expect(q("[data-thread-chip-new]")).toBeNull();
+    act(() => q("[data-thread-chip-new]")!.click());
+    expect(sent()).toEqual([{ type: "newTask", botId: "pepper" }]);
   });
 
   it("shows for a bot whose second open thread another bot opened, beside its main thread", () => {

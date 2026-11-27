@@ -172,7 +172,7 @@ describe("the header's right side", () => {
 });
 
 describe("the Simple header", () => {
-  it("is one pill: the avatar and name, with a dot for another busy conversation, a chevron to the threads, the plus at the header's end, and no title, role or way back", () => {
+  it("is one pill: the avatar and name, with a dot for another busy conversation, the open thread to switch from, and no title, role or way back", () => {
     const busyElsewhere: Bot = { ...bot, title: "Research", mainThreadId: "other", tasks: [...bot.tasks!, { threadId: "other", title: "Other", createdAt: 0, busy: true, activity: "working" }] };
     fixture.advanced = false;
     try {
@@ -184,11 +184,9 @@ describe("the Simple header", () => {
       expect(pill[1]).toContain(">Pepper</span>");
       expect(pill[1]).toContain('data-chathead-elsewhere="true"');
       expect(shell[0].match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "bg-composer", "ring-[0.5px]", "shadow-(--shadow-float)", "p-[5.5px]"]));
-      // A bot with two threads shows only its name and a chevron to its threads; New thread stays beside the computer button.
+      // A bot with two threads names the one on screen beside it, which opens the others.
       expect(threads[0]).toContain('aria-expanded="false"');
-      expect(identity).not.toContain("data-chathead-conversation");
-      expect(identity).not.toContain("data-thread-chip-new");
-      expect(simple.slice(simple.indexOf("data-chathead-controls"))).toMatch(/data-tour="computer"[\s\S]*data-new-thread="true"/);
+      expect(threads[1]).toContain("data-chathead-conversation");
       expect(identity.replace(pill[0], "").replace(threads[0], "").replace(/<span role="status"[^>]*>[^<]*<\/span>/, "")).not.toMatch(/<(button|a|span)[\s>]/);
       for (const gone of ["data-chathead-role", "data-background-activity", "data-chathead-back", 'data-testid="chat-more"']) {
         expect(simple, gone).not.toContain(gone);
